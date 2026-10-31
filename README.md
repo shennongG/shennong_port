@@ -258,17 +258,31 @@ CI（`.github/workflows/build.yml`）在 Windows runner 上会先跑 `--selftest
 
 ---
 
-## 8. 免责声明
+## 8. 免责声明 (Disclaimer)
 
-* 仅供个人学习与测试；ROM 版权归小米公司所有，请于下载后 24 小时内删除。
-* 刷机有变砖与数据丢失风险：`device_platform` 填错、`device_size` 大于实机 super、
-  底包与移植包大版本跨度过大，都可能无法开机。后果自负。
-* 禁止商用 / 售卖盈利。
+* 版权与使用限制：本项目仅供个人学习与测试使用。ROM 版权归小米公司所有，请于下载后 24 小时内删除。
 
-## 9. 致谢与许可
+* 刷机风险警告：刷机有风险，操作需谨慎。以下操作均可能导致设备变砖、数据丢失或无法开机，请自行承担全部后果：
+
+  device_platform 配置填写错误；
+
+  device_size 设置大于实机物理容量；
+
+  Super 分区相关配置异常；
+
+  底包与移植包的大版本跨度太大。
+
+* 测试状态：该项目尚未经过实机测试。
+
+* 严禁商用：本项目严禁用于任何商业用途或售卖盈利。
+  
+* 如有侵权，联系本人删除。
+
+
+
+## 9. 致谢
 
 * [XMAPort](https://github.com/NorthStarK-Lvy/XMAPort)（MIT）：移植引擎、打包器、工具链。
 * [14PRO_SHALLOW_ROM](https://github.com/XHR222/14PRO_SHALLOW_ROM)：14 Pro 精简清单、修补资源与刷机脚本。
-* 感谢余空、木槿香、PJQ 教程，以及 HyperOS 移植社区。
 * 主代码 MIT（见 `LICENSE`）；捆绑的第三方工具（7-Zip / aria2 / payload-dumper-go /
   erofs-utils / lpmake / zstd / apktool / JRE / flashtools）遵循各自原始许可。
