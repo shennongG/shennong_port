@@ -148,6 +148,24 @@ GENERIC_TIERS = {
             ("product", "app/MIRadio*"),
         ],
     },
+    "ai": {
+        "desc": "AI 模型/引擎（18 Pro Max 特有，省 0.2~2 GiB，AI 功能失效）",
+        "rules": [
+            ("product", "etc/ai"),
+            ("product", "etc/ai_models"),
+            ("product", "etc/miui_ai"),
+            ("product", "app/*AI*"),
+            ("product", "priv-app/*AI*"),
+            ("system", "etc/ai"),
+            ("system", "app/*AI*"),
+        ],
+    },
+    "theme": {
+        "desc": "主题/字体/动态图标素材（省 0.1~0.8 GiB，主题可回装）",
+        "rules": [
+            ("product", "media/theme/*"),
+        ],
+    },
 }
 
 # 保护名单：这些关键词命中的目录永不删除（防止误伤相机/桌面等）

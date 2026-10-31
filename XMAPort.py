@@ -416,6 +416,9 @@ def read_packing_config():
         "slim_profile": "shennong",   # 精简 profile
         "slim_tiers": "",             # 预算不够时追加的通用档位
         "slim_offline": "false",      # true=不下载 shennong_files，缺资源就跳过
+        "cleanup_intermediate": "true",  # 解包后删除下载包/解压出的 ROM，省 20GB+
+        "keep_super_img": "false",    # zip 成功后是否保留 raw super.img（7.75GB）
+        "strict_target": "true",      # 目标代号必须等于 [shennong] device
     }
     if CONFIG.exists():
         for raw in CONFIG.read_text(encoding="gbk", errors="ignore").splitlines():
@@ -889,6 +892,104 @@ def inject_adb_debug(pack_cfg):
             f.write(line + "\n")
     info("adb debug props injected into odm build.prop")
     log_write("adb debug props injected: {}".format(target_prop))
+
+
+# ---------------- 移植阶段清理（Windows CI 磁盘很紧） ----------------
+def _flag(pack_cfg, key, default=True):
+    return str(pack_cfg.get(key, "true" if default else "false")).strip().lower() == "true"
+
+
+def _rm_children(path):
+    try:
+        if not path.is_dir():
+            return
+        for child in path.iterdir():
+            try:
+                if child.is_dir():
+                    shutil.rmtree(str(child), ignore_errors=True)
+                else:
+                    child.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
+def cleanup_after_extract(pack_cfg):
+    """OTA zip 解压完就删：两个卡刷包通常 15~20 GB。"""
+    if not _flag(pack_cfg, "cleanup_intermediate", True):
+        return
+    for d in (SRC_DL, TGT_DL):
+        _rm_children(d)
+    info("cleanup: removed OTA archives in download_source/download_target")
+
+
+def cleanup_after_payload(pack_cfg):
+    """payload 解包完就删掉解压出来的 ROM 目录（再省十几 GB）。"""
+    if not _flag(pack_cfg, "cleanup_intermediate", True):
+        return
+    for d in (SRC_ROM, TGT_ROM):
+        _rm_children(d)
+    info("cleanup: removed extracted ROM dirs (source_rom/target_rom)")
+
+
+def _check_direction(pack_cfg):
+    """校验 source/target 代号，防止把 18 Pro Max 的底包当成 14 Pro 用。"""
+    cfg = stage_cfg()
+    sec = cfg.get("sections", {})
+    src_url = SRC_URL or sec.get("source", {}).get("url", "")
+    tgt_url = TGT_URL or sec.get("target", {}).get("url", "")
+    src_dev, tgt_dev = _url_codename(src_url), _url_codename(tgt_url)
+    expected = str(sec.get("shennong", {}).get("device") or "shennong").strip().lower()
+    info("device direction: {} -> {}".format(src_dev or "?", tgt_dev or "?"))
+    if src_dev and tgt_dev and src_dev == tgt_dev:
+        err("source 与 target 代号相同（{}），这不是跨机型移植".format(src_dev))
+        log_write("ERROR: direction check failed: source == target == {}".format(src_dev))
+        return False
+    if tgt_dev and expected and tgt_dev != expected:
+        msg = "目标代号是 {}，但 [shennong] device={}".format(tgt_dev, expected)
+        if _flag(pack_cfg, "strict_target", True):
+            err(msg)
+            err("14 Pro 的精简清单/相机/overlay 都按 shennong 准备，继续会刷坏")
+            err("确认要移植到别的机型：config.ini [packing] strict_target=false")
+            log_write("ERROR: target codename {} != {}".format(tgt_dev, expected))
+            return False
+        err(msg + "（strict_target=false，继续）")
+    return True
+
+
+def _size_table():
+    """打包产物大小表，预算超标时用来定位被放大的分区。"""
+    rows = []
+    for f in sorted(PACK_OUT.glob("*.img"), key=lambda p: p.stat().st_size, reverse=True):
+        if f.name.lower() == "super.img":
+            continue
+        part = f.stem
+        tree = SRC_FS / part
+        if not tree.is_dir():
+            tree = TGT_FS / part
+        try:
+            tree_size = sum(os.path.getsize(os.path.join(r, n))
+                            for r, _d, fs in os.walk(str(tree)) for n in fs)
+        except OSError:
+            tree_size = 0
+        orig = 0
+        for base in (SRC_UNPACK, TGT_UNPACK):
+            p = base / (part + ".img")
+            if p.is_file():
+                orig = p.stat().st_size
+                break
+        rows.append((part, f.stat().st_size, tree_size, orig))
+    return rows
+
+
+def _check_inflation(ratio=2.0):
+    """重打包后的镜像不应比原 payload 大很多；大 2 倍基本就是目录重复/解包错了。"""
+    bad = []
+    for part, img_size, _tree, orig in _size_table():
+        if orig > 0 and img_size > orig * ratio:
+            bad.append((part, img_size, orig))
+    return bad
 
 
 # ---------------- vbmeta 禁验 ----------------
@@ -1388,9 +1489,40 @@ def stage_pack(pack_cfg, auto=False, offline=False):
         info("system_dlkm.img not present in target payload, super will not include it")
 
     # 打包后按真实镜像复查预算：18 Pro Max 的 system/product 通常比 7.75 GiB 大，
-    # 先用 auto_fit_tiers 逐档收敛，再交给 lpmake。
+    # 先用 auto_fit_tiers 逐档收敛，再交给 lpmake。装不下就直接停，避免白写 7.75GB。
+    bad = _check_inflation()
+    if bad:
+        err("有分区重打包后比原始 payload 大 2 倍以上，疑似解包目录重复/底包拿错")
+        print()
+        print("  {:<12} {:>14} {:>14}".format("partition", "image", "payload img"))
+        for part, img_size, orig in bad:
+            print("  {:<12} {:>14} {:>14}".format(
+                part, _human(img_size), _human(orig)))
+        print()
+        err("先跑 --stage port 重新解包；若仍异常，确认 target ROM 是 14 Pro（shennong）")
+        log_write("ERROR: packed image inflation detected: {}".format(
+            ", ".join("{}({}>{})".format(p, i, o) for p, i, o in bad)))
+        return 1
+
+    budget_ok = True
     if str(pack_cfg.get("pack_super", "false")).lower() == "true":
-        auto_fit_super(pack_cfg, lpc_args, counters)
+        budget_ok = auto_fit_super(pack_cfg, lpc_args, counters)
+    if not budget_ok:
+        err("super 装不下：停止 lpmake/zip，避免再写 7.75 GiB 把磁盘撑爆")
+        print()
+        print("  {:<12} {:>14} {:>14} {:>14}".format(
+            "partition", "image", "source tree", "payload img"))
+        for part, img_size, tree_size, orig in _size_table():
+            flag = ""
+            if orig and img_size > orig * 1.2:
+                flag = "  <-- 比 payload 大很多，检查解包/打包目录"
+            print("  {:<12} {:>14} {:>14} {:>14}{}".format(
+                part, _human(img_size), _human(tree_size), _human(orig), flag))
+        print()
+        err("若 vendor/odm 明显大于预期，检查 target ROM 是否是 14 Pro（shennong）")
+        err("若 source 分区太大，加 slim_tiers / extra_remove，或换 compression=zstd")
+        log_write("ERROR: super budget not satisfied, abort before lpmake")
+        return 1
 
     # 生成 super.img；空间不足(rc=1)时自动极限精简 → 重打包 product → 重试一次
     log_write("Creating super.img (pack_super={})".format(pack_cfg.get("pack_super", "false")))
@@ -1428,8 +1560,10 @@ def stage_pack(pack_cfg, auto=False, offline=False):
     patch_vbmeta(pack_cfg)
 
     # ---- 卡刷包 zip（14PRO_SHALLOW_ROM 的输出形态）----
+    # 只有 lpmake 成功且没有分区打包失败时才做 zip；否则只会拿半个 super 去压缩。
     zip_name = ""
-    if (package_zip is not None
+    if (super_rc == 0 and counters["pack_fail"] == 0
+            and package_zip is not None
             and str(pack_cfg.get("package_zip", "true")).lower() == "true"
             and (PACK_OUT / "super.img").is_file()):
         info("=== Step 7.5/8: Packaging flashable zip ===")
@@ -1652,6 +1786,13 @@ def one_click_port(auto=False, stage="all", offline=False):
         raise
     pack_cfg = read_packing_config()
 
+    # 先核对 source/target 代号，别下完 18GB 才发现底包拿错
+    if not _check_direction(pack_cfg):
+        if auto:
+            return 1
+        pause()
+        raise ReturnToMenu()
+
     # 输入/读取目标设备代号
     cfg_txt = WORKSPACE / "config.txt"
     if CLI_DEVICE:
@@ -1752,6 +1893,7 @@ def one_click_port(auto=False, stage="all", offline=False):
         log_write("Step 2: TGT_URL empty, reuse target workspace")
     info("Step 2 done")
     log_write("Step 2: Extract archives done")
+    cleanup_after_extract(pack_cfg)
 
     # ---------------- Step 3: 解包 payload ----------------
     info("=== Step 3/8: Extract payload ===")
@@ -1768,6 +1910,7 @@ def one_click_port(auto=False, stage="all", offline=False):
         log_write("Target payload extracted to: {}".format(TGT_UNPACK))
     info("Step 3 done")
     log_write("Step 3: Extract payload done")
+    cleanup_after_payload(pack_cfg)
 
     # ---------------- Step 4: 解包镜像 ----------------
     info("=== Step 4/8: Unpack IMG ===")
@@ -2060,6 +2203,14 @@ def selftest():
         print("  package_zip     = {}".format(cfg.get("package_zip")))
         print("  super_style     = {} (sparse={})".format(
             cfg.get("super_style"), cfg.get("sparse")))
+        print("  cleanup/keep    = {}/{}".format(
+            cfg.get("cleanup_intermediate"), cfg.get("keep_super_img")))
+        try:
+            free = shutil.disk_usage(str(ROOT)).free
+            print("  free disk       = {:.1f} GiB (需要 ~35 GiB：下载+解包+打包)".format(
+                free / 1073741824.0))
+        except OSError:
+            pass
         if scommon:
             try:
                 ini = scommon.read_ini()

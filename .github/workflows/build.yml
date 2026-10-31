@@ -49,6 +49,21 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Report disk
+        shell: pwsh
+        run: |
+          Get-PSDrive C,D | Format-Table Name,@{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}
+
+      - name: Free unused SDK space
+        shell: pwsh
+        run: |
+          foreach ($p in @("C:\Android", "C:\Program Files\Android",
+                           "C:\Program Files\Microsoft SDKs",
+                           "C:\Users\runneradmin\.nuget")) {
+            if (Test-Path $p) { Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue }
+          }
+          Get-PSDrive C,D | Format-Table Name,@{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}
+
       - name: Self-test
         shell: pwsh
         run: python XMAPort.py --selftest

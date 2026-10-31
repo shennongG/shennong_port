@@ -59,6 +59,13 @@ def _md5(path, chunk=8 << 20):
     return h.hexdigest()
 
 
+def _free_bytes(path):
+    try:
+        return shutil.disk_usage(str(path)).free
+    except OSError:
+        return -1
+
+
 def _zstd_compress(src, dst, level=12):
     """返回压缩器名称；失败返回空串。"""
     if ZSTD.is_file():
@@ -140,9 +147,22 @@ def build(cfg, compress=None, dry_run=False, quiet=False):
     if not quiet:
         print("  [pack] firmware-update: {} 个镜像".format(fw_count))
 
-    # 2) super 压缩
+    keep_raw = str(cfg.get("flat", {}).get("keep_super_img", "false")).strip().lower() == "true"
+    cleanup = str(cfg.get("flat", {}).get("cleanup_intermediate", "true")).strip().lower() == "true"
+    super_bytes = super_img.stat().st_size
+    free = _free_bytes(sc.WORKSPACE)
+    if not quiet:
+        print("  [pack] super.img {}, 剩余磁盘 {}".format(
+            sc.human(super_bytes), sc.human(free) if free >= 0 else "?"))
+
+    # 2) super 压缩（先确认磁盘装得下 zst，再动手）
     zstd_name = ""
     if compress:
+        need = int(super_bytes * 0.55) + (200 << 20)
+        if 0 <= free < need:
+            return 1, {"error": "磁盘不足：压缩 super 需要约 {}，只剩 {}。"
+                                "可设 keep_super_img=false / 清理 workspace/download_*".format(
+                                    sc.human(need), sc.human(free))}
         level = sc.cfg_int(cfg, "zstd_level", 12)
         if not quiet:
             print("  [pack] 压缩 super.img (zstd level {}) ...".format(level))
@@ -150,11 +170,27 @@ def build(cfg, compress=None, dry_run=False, quiet=False):
         if zstd_name:
             if not quiet:
                 print("  [pack] super.zst 完成 ({})".format(zstd_name))
+            # raw super 占 7.75 GiB；zip 里已经有 zst，默认不再保留 raw
+            if not keep_raw:
+                try:
+                    super_img.unlink()
+                    if not quiet:
+                        print("  [pack] 已删除 raw super.img（keep_super_img=false）")
+                except OSError:
+                    pass
         else:
             if not quiet:
                 print("  [pack] [!] 没有可用的 zstd，改为直接打包 super.img")
     if not (stage / "super.zst").is_file():
-        shutil.copy2(str(super_img), str(stage / "super.img"))
+        # 不复制 7.75GB：同盘硬链接，失败才退回复制
+        link = stage / "super.img"
+        try:
+            os.link(str(super_img), str(link))
+        except OSError:
+            try:
+                shutil.copy2(str(super_img), str(link))
+            except OSError as e:
+                return 1, {"error": "无法把 super.img 放进 staging: {}".format(e)}
 
     # 3) 刷机脚本
     if FLASH_TOOLS.is_file():
@@ -169,6 +205,14 @@ def build(cfg, compress=None, dry_run=False, quiet=False):
     _touch_tree(stage)
     if not SEVEN_ZIP.is_file():
         return 1, {"error": "tools/7z.exe 缺失"}
+    zst = stage / "super.zst"
+    payload_bytes = zst.stat().st_size if zst.is_file() else super_bytes
+    free = _free_bytes(sc.WORKSPACE)
+    need = payload_bytes + (200 << 20)
+    if 0 <= free < need:
+        return 1, {"error": "磁盘不足：7z 打包需要约 {}，只剩 {}。"
+                            "可删 workspace/download_* 或已解压的 source_rom/target_rom".format(
+                                sc.human(need), sc.human(free))}
     tmp_zip = sc.WORKSPACE / "rom_tmp.zip"
     if tmp_zip.exists():
         tmp_zip.unlink()
@@ -188,6 +232,13 @@ def build(cfg, compress=None, dry_run=False, quiet=False):
     os.replace(tmp_zip, final)
     size = final.stat().st_size
 
+    # 5) 清理 staging（zst / 刷机脚本 / super 硬链接），CI 上能省 4~5 GB
+    if cleanup:
+        try:
+            shutil.rmtree(str(stage), ignore_errors=True)
+        except OSError:
+            pass
+
     summary = {
         "rom_name": rom_name,
         "path": str(final),
@@ -195,7 +246,7 @@ def build(cfg, compress=None, dry_run=False, quiet=False):
         "md5": md5,
         "compressor": zstd_name or "none",
         "firmware_images": fw_count,
-        "super_bytes": super_img.stat().st_size,
+        "super_bytes": super_bytes,
         "ts": int(time.time()),
         "versions": sp.detect_versions(cfg),
     }

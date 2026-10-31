@@ -89,6 +89,19 @@ workspace/output/SHENNONG_ShalloW_<版本>_<md5>_<安卓>.0.zip
 
 ## 6. 排错
 
+**Q：CI 报 `There is not enough space on the disk` / `7z 打包失败 (rc=2)`？**
+两套 ROM 解压后 + 7.75 GiB raw super + zst + zip 很容易超过 runner 磁盘。
+本版已默认：
+
+* `cleanup_intermediate=true`：Step 2 解压完删 OTA zip，Step 3 解包完删
+  `source_rom/`、`target_rom/`（合计能省 30 GB 左右）；
+* `keep_super_img=false`：zip 成功后删除 7.75 GiB raw `super.img`；
+* lpmake 之前先做预算判断，装不下直接停，不会白写 7.75 GiB；
+* 只有 lpmake 成功才做 zip，避免拿半个 super 去压缩。
+
+还报错时按顺序手动删：`workspace/download_source`、`workspace/download_target`、
+`workspace/source_rom`、`workspace/target_rom`、`workspace/package_stage`。
+
 **Q：`--selftest` 报缺 tools/xxx？**
 解压不完整，或用了旧版仓库。重新拉取仓库（`tools/` 必须完整，含 `jre/`、`flashtools.zip`）。
 

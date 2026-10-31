@@ -124,8 +124,10 @@ python XMAPort.py --auto --device shennong --stage pack   :: 只打包 + 出 zip
   应用清单永远不删（`system` 这种短关键词不会误伤 `Settings`）；
 * `slim_keep=`：`config.ini` 里手工追加的分区相对 glob。
 
-预算不够时再按顺序追加通用档位：`media` → `audio` → `preinstall` → `apps` → `custom`
-（`config.ini [slim] slim_tiers`，默认 `media,preinstall`）。
+预算不够时再按顺序追加通用档位：
+`media` → `audio` → `preinstall` → `apps` → `ai` → `theme` → `custom`
+（`slim_tiers` / `auto_fit_tiers` 可调）。18 Pro Max 这种大包通常还需要
+`ai`（AI 模型）甚至 `theme`（主题素材）才装得下 7.75 GiB，代价是对应功能/主题失效。
 
 ### 3.2 14 Pro 功能修补（`tools/shennong_patch.py`，来自 make.sh）
 
@@ -170,7 +172,7 @@ asset_base=https://ghfast.top/https://raw.githubusercontent.com/XHR222/14PRO_SHA
 ## 4. 打包阶段（针对 14 Pro 调过）
 
 1. **预算收敛**：打包完 system/system_ext/product/odm/vendor… 后，用真实镜像字节数
-   复查 `usable`；超出就按 `auto_fit_tiers=apps,audio,media,preinstall` 逐档精简，
+   复查 `usable`；超出就按 `auto_fit_tiers=apps,audio,media,preinstall,ai,theme` 逐档精简，
    只重打受影响的分区，再复查（`auto_fit=true`）；
 2. 用 `lpmake` 按 **14 Pro 验证过的 split_ab 布局**合成 super：
    `system_a` 带镜像 / `system_b` 为 0、`qti_dynamic_partitions_a/_b`、
@@ -235,6 +237,12 @@ shennong_port/
   会把底包 VNDK 同步进移植包，但框架/HAL 差得太远时仍可能卡开机；首选更早的
   madrid OS4 包或更新的 shennong 底包，详见
   [docs/PORT_18PROMAX_TO_14PRO.md](docs/PORT_18PROMAX_TO_14PRO.md)。
+* **磁盘**：18 Pro Max + 14 Pro 两套包解压后非常占空间。流水线默认
+  `cleanup_intermediate=true`（解压完就删 OTA/ROM）和 `keep_super_img=false`
+  （zip 完成后删 7.75 GiB raw super）。仍不够时按提示删 `workspace/download_*`、
+  `workspace/source_rom`、`workspace/target_rom`。
+* **目标代号校验**：`strict_target=true` 会在下载前检查 target URL 的代号是否为
+  `shennong`，避免拿错底包（比如把 18 Pro Max 当底包，vendor/odm 会大得离谱）。
 * **未在真机验证**：本仓库只做了静态审查、语法自检、合成数据端到端测试和工具链实跑；
   没有真机、没有真实 ROM 直链下载。刷机风险自负。
 

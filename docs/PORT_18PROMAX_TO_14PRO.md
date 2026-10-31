@@ -101,7 +101,26 @@ is_skip_apex=false
 3. 看 `adb logcat` / `dmesg` 定位是 `apexd`、`vold` 还是 SurfaceFlinger；
 4. 确认不是精简删多了（用 `--no-slim` 跑一次对照）。
 
-## 5. 刷写
+## 5. 体积/磁盘排错
+
+打包完成后会打印预算；装不下时**不会**去写 7.75 GiB 的 super.img，而是直接给出：
+
+```
+partition           image     source tree     payload img
+vendor          4.69 GiB        4.70 GiB        1.52 GiB   <-- 比 payload 大很多
+```
+
+* 如果 `vendor`/`odm` 比底包 payload 的 `vendor.img`/`odm.img` 大很多，
+  说明底包拿错了（大概率不是 shennong）或解包目录被污染。
+  超过 **2 倍**时流水线会直接中止（`_check_inflation`），不会继续 lpmake；
+  `strict_target=true` 还会在下载前就用 target URL 的代号拦住这种情况。
+* 如果 `system`/`product` 太大，依次加档：`auto_fit_tiers=apps,audio,ai,theme,media,preinstall`；
+  `python tools\slim.py plan --top 30` 手工把大文件写进 `extra_remove`。
+* 压缩从 `lz4hc,9` 换 `zstd,15` 通常还能再省 10~15%（打包更慢）。
+* 磁盘：默认 `cleanup_intermediate=true`、`keep_super_img=false`；
+  仍不足就删 `workspace/download_*`、`workspace/source_rom`、`workspace/target_rom`。
+
+## 6. 刷写
 
 ```bat
 :: 0) 确认 super 放得下（十六进制换算成十进制 >= 8321499136）
@@ -116,7 +135,7 @@ FlashWindows.bat
 
 建议全程保留一个可用的 TWRP / 底包线刷包，至少能回滚。
 
-## 6. 与 14PRO_SHALLOW_ROM 的差异
+## 7. 与 14PRO_SHALLOW_ROM 的差异
 
 * 输入从「已经移植好的卡刷包」变成「源 ROM + 底包」两个直链，移植在流水线内完成；
 * 应用清单、资源替换、build.prop、lpmake 参数、zip 命名保持一致；
