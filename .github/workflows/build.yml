@@ -1,0 +1,142 @@
+name: ShennongPort (port -> slim -> pack)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch:
+    inputs:
+      device:
+        description: "目标设备代号 (14 Pro = shennong)"
+        required: true
+        default: "shennong"
+      source:
+        description: "源 ROM 直链（留空用 config.ini）"
+        required: false
+        default: ""
+      target:
+        description: "底包 ROM 直链（留空用 config.ini）"
+        required: false
+        default: ""
+      stage:
+        description: "all / port / slim / pack"
+        required: true
+        default: "all"
+      offline:
+        description: "跳过 shennong_files 下载 (true/false)"
+        required: true
+        default: "false"
+
+concurrency:
+  group: shennong-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ------------------------------------------------------------------ 完整流水线
+  pipeline:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 360
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Self-test
+        shell: pwsh
+        run: python XMAPort.py --selftest
+
+      - name: Cache shennong_files
+        uses: actions/cache@v4
+        with:
+          path: assets/shennong_files
+          key: shennong-assets-v1
+
+      - name: Fetch 14 Pro assets (about 310 MiB)
+        if: ${{ inputs.offline != 'true' && inputs.stage != 'port' }}
+        shell: pwsh
+        run: python tools/assets.py fetch
+
+      - name: Run pipeline
+        shell: pwsh
+        env:
+          DEVICE: ${{ inputs.device }}
+          SOURCE_URL: ${{ inputs.source }}
+          TARGET_URL: ${{ inputs.target }}
+          STAGE: ${{ inputs.stage }}
+          OFFLINE: ${{ inputs.offline }}
+        run: |
+          $a = @("--auto", "--device", $env:DEVICE, "--stage", $env:STAGE)
+          if ($env:OFFLINE -eq "true") { $a += "--offline" }
+          if ($env:SOURCE_URL) { $a += @("--source", $env:SOURCE_URL) }
+          if ($env:TARGET_URL) { $a += @("--target", $env:TARGET_URL) }
+          Write-Host "python XMAPort.py $($a -join ' ')"
+          python XMAPort.py @a
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: List outputs
+        if: always()
+        shell: pwsh
+        run: |
+          Get-ChildItem workspace\output -ErrorAction SilentlyContinue | Format-Table Name, Length
+          Get-ChildItem workspace\packed -ErrorAction SilentlyContinue | Format-Table Name, Length
+
+      - name: Split flashable zip (1900 MiB volumes)
+        if: success() && inputs.stage != 'port' && inputs.stage != 'slim'
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem workspace\output\*.zip | Sort-Object LastWriteTime | Select-Object -Last 1
+          if (-not $zip) { Write-Error "no flashable zip produced"; exit 1 }
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          .\tools\7z.exe a -mx=0 -v1900m "release\$($zip.BaseName).7z" $zip.FullName
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $zip.FullName | Out-File release\zip_name.txt -Encoding utf8
+
+      - name: Upload to Release
+        if: success() && inputs.stage != 'port' && inputs.stage != 'slim'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $date = Get-Date -Format "yyyyMMdd-HHmm"
+          $tag = "shennong-$date"
+          $files = @(Get-ChildItem release\* | ForEach-Object { $_.FullName })
+          $files += @(Get-ChildItem workspace\*.log -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+          $notes = "移植 → 精简 → 打包 自动产物。`n`n目标设备: ${{ inputs.device }}`n阶段: ${{ inputs.stage }}`n`n合并分卷：7z x *.7z.001"
+          gh release create $tag $files --title "ShennongPort $date" --notes $notes --latest
+
+  # ------------------------------------------------------------------ 源码包
+  source_package:
+    if: github.event_name == 'push'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package source
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          Copy-Item XMAPort.py, config.ini, LICENSE, README.md release\
+          Copy-Item -Recurse tools release\tools
+          Copy-Item -Recurse docs release\docs
+          Compress-Archive -Path release\* -DestinationPath ShennongPort-win64.zip
+
+      - name: Upload source package
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $date = Get-Date -Format "yyyyMMdd"
+          $n = 1
+          $tag = "ShennongPort-$date-Beta-$n"
+          while (gh release view $tag 2>$null) { $n++; $tag = "ShennongPort-$date-Beta-$n" }
+          gh release create $tag ShennongPort-win64.zip --title "ShennongPort $date Beta" --notes "Windows 源码包：解压后 python XMAPort.py（详见 README.md）。" --latest

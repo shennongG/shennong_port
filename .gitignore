@@ -1,0 +1,20 @@
+# ---- build / test artifacts ----
+workspace/
+assets/shennong_files/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# ---- local outputs ----
+*.zip
+!tools/flashtools.zip
+*.img
+*.zst
+*.log
+
+# ---- editors / OS ----
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
