@@ -83,7 +83,7 @@ workspace/packed/super.img                                          raw 7.75 GiB
 workspace/output/ShennongPort_Mi14Pro_<版本>_<donor>_<md5>_<安卓>.zip
 ```
 
-* Windows 线刷：解压 zip，运行 `X-MiPort-Flash.bat`
+* Windows 线刷：解压 zip，运行 `Flash-Windows.bat`
   （会先解压 `images/super.img.zst`，再校验 `fastboot getvar product` 为 `shennong`）。
 * Recovery 卡刷：整个 zip 进 TWRP 安装（`META-INF/com/google/android/update-binary`，
   脚本会二次校验机型与文件名里的 MD5 片段）。
@@ -137,7 +137,7 @@ workspace/output/ShennongPort_Mi14Pro_<版本>_<donor>_<md5>_<安卓>.zip
 [PORT_18PROMAX_TO_14PRO.md](PORT_18PROMAX_TO_14PRO.md)。
 
 **Q：super.img 是 7.75 GiB 整？**
-`super_style=split_ab` 用了 `-F`，lpmake 会输出完整 raw 镜像（与 X-MiPort 参考包一致）。
+`super_style=split_ab` 用了 `-F`，lpmake 会输出完整 raw 镜像（与 参考成品包一致）。
 zip 里是 `images/super.img.zst`，体积由实际数据决定，刷入前脚本会解压。
 
 **Q：zip 里没有 images/super.img.zst？**
@@ -146,6 +146,26 @@ zip 里是 `images/super.img.zst`，体积由实际数据决定，刷入前脚�
 **Q：vendor 修补没生效？**
 检查 `repack_vendor=true`、`target_payload/vendor.img` 是否存在；
 `unpack_vendor_for_patch()` 解包失败时日志会写 `WARNING: vendor.img not found`。
+
+**Q：想换成自己的 TWRP / 第三方 Recovery？**
+把 recovery 镜像放到项目里（`.img` 或 `.img.zst` 都行），然后：
+
+```ini
+[packing]
+recovery_img=assets/root_images/recovery_twrp.img.zst
+flash_recovery=true
+```
+
+重跑 `python XMAPort.py --auto --stage pack --device shennong` 即可；
+打包后 `images/recovery_twrp.img` 会被线刷脚本和卡刷脚本刷到 `recovery_a/_b`。
+默认用仓库自带的 `assets/root_images/recovery_twrp.img.zst`（100 MB 的 TWRP 压缩后 61 MB，
+避免超 GitHub 单文件限制）；留空则用 `assets/shennong_files/recovery.zip`。
+不想要 recovery 就设 `flash_recovery=false`。
+
+**Q：ROOT 补丁（init_boot_*.img）怎么换？**
+放到 `assets/root_images/`，文件名保持
+`init_boot_official/magisk/ksu/sukisu/ksu-next/kitsune-mask.img`；
+或改 `[packing] root_images=` 指向别的目录。线刷菜单 1-6、卡刷音量键都按这些文件读取。
 
 **Q：想把 mi_ext 换成移植包的？**
 `config.ini [packing] mi_ext_source=source`。

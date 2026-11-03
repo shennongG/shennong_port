@@ -10,7 +10,9 @@ __pycache__/
 *.zip
 !tools/flashtools.zip
 *.img
+!assets/root_images/*.img
 *.zst
+!assets/root_images/*.zst
 *.log
 
 # ---- editors / OS ----

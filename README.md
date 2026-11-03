@@ -57,13 +57,17 @@ workspace/packed/super.img                                    lpmake 生成的 r
 workspace/output/ShennongPort_Mi14Pro_<版本>_<donor>_<md5>_<安卓>.zip   可刷卡刷包
 ```
 
-卡刷包结构（借鉴本机 X-MiPort 4.0.5 的 14 Pro 成品包）：
+卡刷包结构（对齐参考 14 Pro 成品包）：
 
 ```
 images/super.img.zst      ← zstd 压缩的 super.img（TWRP 直接 pipe 刷入）
-images/*.img              ← boot / init_boot / vbmeta / 基带 / TWRP …
-META-INF/…/update-binary  ← 现生成的 TWRP 刷机脚本（含机型/MD5 校验）
-X-MiPort-Flash.bat        ← 现生成的 Windows 线刷脚本
+images/boot.img           ← 底包 boot
+images/init_boot_*.img    ← NoROOT / Magisk / KernelSU / SukiSU / KernelSU-Next / Kitsune Mask
+images/recovery_twrp.img  ← TWRP
+images/*.img              ← vbmeta / 基带等固件
+META-INF/…/update-binary  ← 现生成的 TWRP 刷机脚本（机型/MD5/ROOT 音量键选择）
+Flash-Windows.bat         ← 现生成的 Windows 线刷脚本（ROOT 菜单 + TWRP 询问）
+刷机说明.txt              ← 中文刷机说明（线刷/卡刷/校验）
 bin/android/{7zzs,zstd}   ← Recovery 里解压 super 用
 bin/Windows/*             ← fastboot / adb / zstd
 ```
@@ -179,18 +183,58 @@ asset_base=https://ghfast.top/https://raw.githubusercontent.com/XHR222/14PRO_SHA
 1. **预算收敛**：打包完 system/system_ext/product/odm/vendor… 后，用真实镜像字节数
    复查 `usable`；超出就按 `auto_fit_tiers=apps,audio,media,preinstall,ai,theme` 逐档精简，
    只重打受影响的分区，再复查（`auto_fit=true`）；
-2. 用 `lpmake` 按 **X-MiPort 4.0.5 在 shennong 上验证过的布局**合成 super：
+2. 用 `lpmake` 按 **参考 14 Pro 成品包 在 shennong 上验证过的布局**合成 super：
    只有 `<part>_a`、单 group `qti_dynamic_partitions_a`、`--virtual-ab -F`、
    `device_size=8321499136`（7.75 GiB）、`sparse=false`（raw）；
 3. `zstd -12` 压缩成 `images/super.img.zst`（没有 zstd 时退回 Python 3.14 自带
    `compression.zstd`），压缩完默认删掉 raw super；
 4. 把 14 Pro 固件镜像（boot / init_boot / vbmeta / modem / TWRP…）复制到 `images/`；
 5. 展开 `tools/flashtools.zip` 提供 `bin/android`、`bin/Windows`；
-6. 现生成 `META-INF/.../update-binary`（TWRP）和 `X-MiPort-Flash.bat`（fastboot），
+6. 现生成 `META-INF/.../update-binary`（TWRP）和 `Flash-Windows.bat`（fastboot），
    固定时间戳后打 zip，命名 `ShennongPort_Mi14Pro_<版本>_<donor>_<md5>_<安卓>.zip`。
 
 > 该命名让 update-binary 能取文件名第 5 段做 MD5 校验；固件按 14 Pro 的分区名
 > 刷到 `_a/_b` 两个槽，和参考包一致。
+
+### Recovery 与 ROOT 补丁
+
+仓库里已经带好一套 14 Pro 可用的补丁（`assets/root_images/`）：
+
+```
+init_boot_official.img        NoROOT
+init_boot_magisk.img          Magisk
+init_boot_ksu.img             KernelSU
+init_boot_sukisu.img          SukiSU-Ultra
+init_boot_ksu-next.img        KernelSU-Next
+init_boot_kitsune-mask.img    Kitsune Mask
+recovery_twrp.img.zst         TWRP（压缩存放，打包时解压为 recovery_twrp.img）
+```
+
+打包时会全部放进 `images/`。线刷 `Flash-Windows.bat` 有 1-6 的 ROOT 菜单；
+卡刷 `update-binary` 用音量键 `[-]` 切换、`[+]` 确认。两者都会先刷官方
+`boot.img`，再按选择刷对应的 `init_boot_*.img`，最后询问/选择是否刷 TWRP。
+
+换自己的 recovery / ROOT 补丁：
+
+```ini
+[packing]
+; 第三方 recovery；.img 或 .img.zst 都行（留空则用 shennong_files/recovery.zip）
+recovery_img=assets/root_images/recovery_twrp.img.zst
+; ROOT 补丁目录（init_boot_*.img 按固定文件名读取）
+root_images=assets/root_images
+; 不想刷 recovery 就设 false
+flash_recovery=true
+```
+
+然后重跑 `--stage pack`。验证：
+
+```bat
+7z l workspace\output\ShennongPort_Mi14Pro_*.zip | findstr init_boot
+7z l workspace\output\ShennongPort_Mi14Pro_*.zip | findstr recovery_twrp
+```
+
+注意：recovery / init_boot 必须与 14 Pro 的底包内核匹配，大小不能超过对应分区；
+刷错 recovery 不影响 fastboot，可随时重刷。
 
 预算 = `min(config.device_size, 底包实测 super_partition_size, shennong 档案上限)`
 − `metadata×slots` − `margin_mib`。仍装不下时，原版 XMAPort 的

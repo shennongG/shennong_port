@@ -60,9 +60,9 @@ Step 6 会用 `shennong_files/` 把 14 Pro 的整套配置换回去：
 | 版本信息 | build.prop 统一为底包版本 + `ro.product.product.name=shennong` |
 | 恢复/OTA | 删除 `recovery-from-boot.p`、`install-recovery.sh`，内置 TWRP |
 
-## 3. super 布局：照抄 X-MiPort 4.0.5 的成品包
+## 3. super 布局：照抄 参考 14 Pro 成品包 的成品包
 
-用 `lpdumps` 读本机参考包 `F:\Rom\X-MiPort-4.0.5\images\super.img`，得到：
+用 `lpdumps` 读参考包的 images/super.img，得到：
 
 ```
 Metadata version: 10.2   slots: 3   flags: virtual_ab_device
@@ -88,7 +88,7 @@ XMAPort 原来的单 group 布局仍保留为 `super_style=single`，只建议�
 
 卡刷包结构也对齐参考包：`images/super.img.zst`、`images/*.img`、
 `bin/android/{7zzs,zstd}`、`bin/Windows/*`、现生成的 `update-binary` 和
-`X-MiPort-Flash.bat`。
+`Flash-Windows.bat`。
 
 ## 4. 版本跨度（Android 17 → 16）
 
