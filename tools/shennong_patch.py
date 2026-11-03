@@ -162,7 +162,7 @@ def _zip_name(url):
 
 def _android_version(url):
     name = _zip_name(url)
-    m = re.search(r"_(\d+(?:\.\d+)?)\.zip$", name)
+    m = re.search(r"-user-(\d+)\.", name) or re.search(r"_(\d+(?:\.\d+)?)\.zip$", name)
     if m:
         return m.group(1).split(".")[0]
     return ""

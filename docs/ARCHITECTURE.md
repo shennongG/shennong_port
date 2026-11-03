@@ -71,8 +71,8 @@ usable = budget - metadata_size × metadata_slots - margin
 
 super 布局由 `super_style` 决定：
 
-* `split_ab`（默认）：14PRO_SHALLOW_ROM 在 shennong 验证过的布局 ——
-  每个分区 `<name>_a` 带镜像、`<name>_b` size=0，两个 group `qti_dynamic_partitions_a/_b`，
+* `split_ab`（默认）：X-MiPort 4.0.5 在 shennong 验证过的布局 ——
+  只有 `<name>_a`、单 group `qti_dynamic_partitions_a`、
   `-F --virtual-ab`，raw 输出（`sparse=false`）；
 * `single`：XMAPort 原始的单 group 布局，仅用于实验。
 

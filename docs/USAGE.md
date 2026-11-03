@@ -79,12 +79,14 @@ python tools\package_zip.py
 ## 5. 产物与刷写
 
 ```
-workspace/packed/super.img
-workspace/output/SHENNONG_ShalloW_<版本>_<md5>_<安卓>.0.zip
+workspace/packed/super.img                                          raw 7.75 GiB（默认刷完删）
+workspace/output/ShennongPort_Mi14Pro_<版本>_<donor>_<md5>_<安卓>.zip
 ```
 
-* Windows 线刷：解压 zip，运行 `FlashWindows.bat`（要求 `fastboot getvar product` 为 `shennong`）。
-* Recovery 卡刷：整个 zip 进 TWRP 安装（`META-INF/com/google/android/update-binary`）。
+* Windows 线刷：解压 zip，运行 `X-MiPort-Flash.bat`
+  （会先解压 `images/super.img.zst`，再校验 `fastboot getvar product` 为 `shennong`）。
+* Recovery 卡刷：整个 zip 进 TWRP 安装（`META-INF/com/google/android/update-binary`，
+  脚本会二次校验机型与文件名里的 MD5 片段）。
 * 刷前确认：`fastboot getvar partition-size:super` ≥ `8321499136`（十六进制 `0x1F0000000`）。
 
 ## 6. 排错
@@ -95,6 +97,8 @@ workspace/output/SHENNONG_ShalloW_<版本>_<md5>_<安卓>.0.zip
 
 * `cleanup_intermediate=true`：Step 2 解压完删 OTA zip，Step 3 解包完删
   `source_rom/`、`target_rom/`（合计能省 30 GB 左右）；
+* `cleanup_payload_images=true`：Step 4 解包成文件系统后删掉不再需要的 payload
+  `*.img`（再省约 14 GB，保留 vendor/mi_ext/dlkm/固件）；
 * `keep_super_img=false`：zip 成功后删除 7.75 GiB raw `super.img`；
 * lpmake 之前先做预算判断，装不下直接停，不会白写 7.75 GiB；
 * 只有 lpmake 成功才做 zip，避免拿半个 super 去压缩。
@@ -126,15 +130,11 @@ workspace/output/SHENNONG_ShalloW_<版本>_<md5>_<安卓>.0.zip
 [PORT_18PROMAX_TO_14PRO.md](PORT_18PROMAX_TO_14PRO.md)。
 
 **Q：super.img 是 7.75 GiB 整？**
-`super_style=split_ab` 用了 `-F`，lpmake 会输出完整 raw 镜像（14PRO 的刷机脚本要求）。
-zip 里会先 `zstd` 压缩，体积由实际数据决定。
+`super_style=split_ab` 用了 `-F`，lpmake 会输出完整 raw 镜像（与 X-MiPort 参考包一致）。
+zip 里是 `images/super.img.zst`，体积由实际数据决定，刷入前脚本会解压。
 
-**Q：super.img 比 7.75G 小很多？**
-`sparse=true` 时是稀疏文件，磁盘占用按实际数据算；判断预算要看
-`slim.py check` 里的未稀疏字节数。默认 `sparse=false` 就是完整 raw。
-
-**Q：zip 里没有 super.zst？**
-说明 `tools/zstd.exe` 缺失且 Python < 3.14，已自动退回 `super.img`；不影响刷写，只是包更大。
+**Q：zip 里没有 images/super.img.zst？**
+说明 `tools/zstd.exe` 缺失且 Python < 3.14，已自动退回 `images/super.img`；不影响刷写，只是包更大。
 
 **Q：vendor 修补没生效？**
 检查 `repack_vendor=true`、`target_payload/vendor.img` 是否存在；

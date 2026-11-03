@@ -33,11 +33,11 @@
 | services.jar 去签名校验 | `step_signature`（可选） | apktool 反编译 → smali 改 `const/4 vX, 0x0` → 重编译 |
 | 拷贝 `$device/*` 到 images | pack 阶段的分区来源表 | |
 | `fspatch/contextpatch` + `mkfs.erofs -zlz4hc,9` | `pack_partitions.py` | 权限/SELinux 由 fs_config + file_contexts 补全 |
-| `lpmake … super:8321499136` | `create_super_img` + `_build_lpmake_cmd` | `super_style=split_ab` 复刻 `_a/_b` + `-F --virtual-ab`；`single` 为 XMAPort 原布局 |
+| `lpmake … super:8321499136` | `create_super_img` + `_build_lpmake_cmd` | 复刻 X-MiPort 4.0.5：只有 `_a`、单 group、`-F --virtual-ab`；`single` 为 XMAPort 原布局 |
 | （预算不够时重打） | `auto_fit_super` | 用真实镜像大小复查，逐档精简并只重打受影响分区 |
 | `zstd -12 super.img` | `package_zip._zstd_compress` | Windows 版 `zstd.exe`，或 Python 3.14 stdlib |
-| `7z a …zip images/*` | `package_zip.build` | 固定 mtime，便于复现 |
-| 按 md5 重命名 | `_rom_name` | `SHENNONG_ShalloW_<版本>_<md5[:10]>_<安卓>.0.zip` |
+| `7z a …zip images/*` | `package_zip.build` | 输出 `images/super.img.zst` + 固件 + bin + 现生成脚本 |
+| 按 md5 重命名 | `_rom_name` | `ShennongPort_Mi14Pro_<版本>_<donor>_<md5[:10]>_<安卓>.zip` |
 
 ## 有意的偏差
 
@@ -54,8 +54,9 @@
    修补、再 `pack_partitions.py` 重打包，保证 fs_config/file_contexts 正确。
 6. **mi_ext**：make.sh 用底包；合并版默认 `mi_ext_source=target`，并保留 `source` 选项。
 7. **zstd / 7z**：Linux 版 `zstd` 换成 Windows 版 exe；7z 用仓库自带的 26.02。
-8. **super 布局**：make.sh 用 `_a/_b` + `-F --virtual-ab`；合并版默认
-   `super_style=split_ab` 复刻它，并保留 XMAPort 的单 group 布局作为 `single`。
+8. **super 布局 / 成品包**：不用 make.sh 的 `_a/_b`，改用本机
+   `X-MiPort 4.0.5` 成品包验证过的「只有 `_a`、单 group」布局，卡刷包也照它的
+   `images/super.img.zst` + `bin/android` + 现生成脚本；XMAPort 单 group 布局保留为 `single`。
 9. **预算 auto-fit**：make.sh 假定移植包已经能装进 7.75 GiB；合并版在打包后
    用真实镜像大小复查，超出时自动加档精简（18 Pro Max 通常需要这一步）。
 

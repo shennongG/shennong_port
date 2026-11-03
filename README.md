@@ -49,18 +49,19 @@ python XMAPort.py --auto --device shennong
 产物：
 
 ```
-workspace/packed/super.img                                   lpmake 生成的 sparse super
-workspace/output/SHENNONG_ShalloW_<版本>_<md5前10位>_<安卓>.0.zip   可刷卡刷包
+workspace/packed/super.img                                    lpmake 生成的 raw super（7.75 GiB）
+workspace/output/ShennongPort_Mi14Pro_<版本>_<donor>_<md5>_<安卓>.zip   可刷卡刷包
 ```
 
-卡刷包结构（与 14PRO_SHALLOW_ROM 一致）：
+卡刷包结构（借鉴本机 X-MiPort 4.0.5 的 14 Pro 成品包）：
 
 ```
-super.zst                 ← zstd -12 压缩的 super.img
-firmware-update/*.img     ← boot / dtbo / vbmeta / TWRP …
-FlashWindows.bat          ← 线刷脚本（bin/Windows/fastboot）
-META-INF/…                ← Recovery 卡刷入口
-bin/…                     ← adb / fastboot / zstd / mke2fs
+images/super.img.zst      ← zstd 压缩的 super.img（TWRP 直接 pipe 刷入）
+images/*.img              ← boot / init_boot / vbmeta / 基带 / TWRP …
+META-INF/…/update-binary  ← 现生成的 TWRP 刷机脚本（含机型/MD5 校验）
+X-MiPort-Flash.bat        ← 现生成的 Windows 线刷脚本
+bin/android/{7zzs,zstd}   ← Recovery 里解压 super 用
+bin/Windows/*             ← fastboot / adb / zstd
 ```
 
 ---
@@ -174,14 +175,18 @@ asset_base=https://ghfast.top/https://raw.githubusercontent.com/XHR222/14PRO_SHA
 1. **预算收敛**：打包完 system/system_ext/product/odm/vendor… 后，用真实镜像字节数
    复查 `usable`；超出就按 `auto_fit_tiers=apps,audio,media,preinstall,ai,theme` 逐档精简，
    只重打受影响的分区，再复查（`auto_fit=true`）；
-2. 用 `lpmake` 按 **14 Pro 验证过的 split_ab 布局**合成 super：
-   `system_a` 带镜像 / `system_b` 为 0、`qti_dynamic_partitions_a/_b`、
-   `--virtual-ab -F`、`device_size=8321499136`（7.75 GiB）、`sparse=false`（raw，
-   与 `FlashWindows.bat`、TWRP `update-binary` 兼容）；
-3. `zstd -12` 压缩成 `super.zst`（没有 zstd 时退回 Python 3.14 自带 `compression.zstd`）；
-4. 收集 `firmware-update`（boot/dtbo/vbmeta… + TWRP）；
-5. 展开 `tools/flashtools.zip`（fastboot / adb / 刷机脚本 / META-INF）；
-6. 固定时间戳后用 7-Zip 打 zip，按 `SHENNONG_ShalloW_<版本>_<md5>_<安卓>.0.zip` 命名。
+2. 用 `lpmake` 按 **X-MiPort 4.0.5 在 shennong 上验证过的布局**合成 super：
+   只有 `<part>_a`、单 group `qti_dynamic_partitions_a`、`--virtual-ab -F`、
+   `device_size=8321499136`（7.75 GiB）、`sparse=false`（raw）；
+3. `zstd -12` 压缩成 `images/super.img.zst`（没有 zstd 时退回 Python 3.14 自带
+   `compression.zstd`），压缩完默认删掉 raw super；
+4. 把 14 Pro 固件镜像（boot / init_boot / vbmeta / modem / TWRP…）复制到 `images/`；
+5. 展开 `tools/flashtools.zip` 提供 `bin/android`、`bin/Windows`；
+6. 现生成 `META-INF/.../update-binary`（TWRP）和 `X-MiPort-Flash.bat`（fastboot），
+   固定时间戳后打 zip，命名 `ShennongPort_Mi14Pro_<版本>_<donor>_<md5>_<安卓>.zip`。
+
+> 该命名让 update-binary 能取文件名第 5 段做 MD5 校验；固件按 14 Pro 的分区名
+> 刷到 `_a/_b` 两个槽，和参考包一致。
 
 预算 = `min(config.device_size, 底包实测 super_partition_size, shennong 档案上限)`
 − `metadata×slots` − `margin_mib`。仍装不下时，原版 XMAPort 的

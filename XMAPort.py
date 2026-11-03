@@ -417,6 +417,7 @@ def read_packing_config():
         "slim_tiers": "",             # 预算不够时追加的通用档位
         "slim_offline": "false",      # true=不下载 shennong_files，缺资源就跳过
         "cleanup_intermediate": "true",  # 解包后删除下载包/解压出的 ROM，省 20GB+
+        "cleanup_payload_images": "true",  # 解包成文件系统后删除不用的 payload 镜像
         "keep_super_img": "false",    # zip 成功后是否保留 raw super.img（7.75GB）
         "strict_target": "true",      # 目标代号必须等于 [shennong] device
     }
@@ -933,6 +934,42 @@ def cleanup_after_payload(pack_cfg):
     info("cleanup: removed extracted ROM dirs (source_rom/target_rom)")
 
 
+def cleanup_payload_images(pack_cfg):
+    """解包成文件系统后，删掉不再需要的 payload 镜像（再省 ~14 GB）。
+
+    * 源 payload：全部可删（system_ext 在 is_skip_apex 时要留，mi_ext 在
+      mi_ext_source=source 时要留）；
+    * 目标 payload：system/system_ext/product/odm 可删；vendor（兜底复制）、
+      mi_ext、vendor_dlkm、system_dlkm 与固件镜像必须保留。
+    """
+    if not _flag(pack_cfg, "cleanup_payload_images", True):
+        return
+    freed = 0
+    keep_src = set()
+    if _flag(pack_cfg, "is_skip_apex", False):
+        keep_src.add("system_ext")
+    if str(pack_cfg.get("mi_ext_source", "target")).strip().lower() == "source":
+        keep_src.add("mi_ext")
+    for f in SRC_UNPACK.glob("*.img"):
+        if f.stem in keep_src:
+            continue
+        try:
+            freed += f.stat().st_size
+            f.unlink()
+        except OSError:
+            pass
+    for part in ("system", "system_ext", "product", "odm"):
+        f = TGT_UNPACK / (part + ".img")
+        if f.is_file():
+            try:
+                freed += f.stat().st_size
+                f.unlink()
+            except OSError:
+                pass
+    if freed:
+        info("cleanup: removed payload images ({:.1f} GiB)".format(freed / 1073741824.0))
+
+
 def _check_direction(pack_cfg):
     """校验 source/target 代号，防止把 18 Pro Max 的底包当成 14 Pro 用。"""
     cfg = stage_cfg()
@@ -1262,18 +1299,15 @@ def _build_lpmake_cmd(pack_cfg, lpc_args):
         "--metadata-slots", pack_cfg["metadata_slots"],
     ]
     if style == "split_ab":
-        # 14PRO_SHALLOW_ROM 在 shennong 上验证过的布局：
-        # <part>_a 带镜像，<part>_b size=0，两个 group 都按 device_size 开，
-        # 配 --virtual-ab -F，fastboot / TWRP 都能直接刷。
+        # 参考包 X-MiPort 4.0.5（14 Pro / shennong）验证过的布局：
+        # 只有 <part>_a，单 group qti_dynamic_partitions_a，--virtual-ab -F。
         cmd += ["--block-size", "4096"]
         for name, size, img in _lpc_entries(lpc_args):
             cmd += ["--partition={}_a:readonly:{}:{}_a".format(name, size, group)]
             if img:
                 cmd += ["--image={}_a={}".format(name, img)]
-            cmd += ["--partition={}_b:readonly:0:{}_b".format(name, group)]
         cmd += ["--device", "{}:{}".format(pack_cfg["super_name"], device_size),
                 "--group", "{}_a:{}".format(group, device_size),
-                "--group", "{}_b:{}".format(group, device_size),
                 "-F"]
     else:
         cmd += ["--device", "{}:{}".format(pack_cfg["super_name"], device_size),
@@ -1925,6 +1959,7 @@ def one_click_port(auto=False, stage="all", offline=False):
     log_write("Target images unpacked to: {}".format(TGT_FS))
     info("Step 4 done")
     log_write("Step 4: Unpack IMG done")
+    cleanup_payload_images(pack_cfg)
 
     # ---------------- Step 5: 迁移 ----------------
     info("=== Step 5/8: Migrate ===")

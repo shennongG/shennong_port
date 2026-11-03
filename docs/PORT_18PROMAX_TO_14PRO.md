@@ -60,24 +60,35 @@ Step 6 会用 `shennong_files/` 把 14 Pro 的整套配置换回去：
 | 版本信息 | build.prop 统一为底包版本 + `ro.product.product.name=shennong` |
 | 恢复/OTA | 删除 `recovery-from-boot.p`、`install-recovery.sh`，内置 TWRP |
 
-## 3. super 布局：为什么用 split_ab
+## 3. super 布局：照抄 X-MiPort 4.0.5 的成品包
 
-14PRO_SHALLOW_ROM 在 shennong 上验证过的 lpmake 命令是：
+用 `lpdumps` 读本机参考包 `F:\Rom\X-MiPort-4.0.5\images\super.img`，得到：
+
+```
+Metadata version: 10.2   slots: 3   flags: virtual_ab_device
+Group: qti_dynamic_partitions_a (仅一个，最大 8321499136)
+Partitions: mi_ext_a, odm_a, vendor_a, vendor_dlkm_a, system_a,
+            system_dlkm_a, product_a, system_ext_a   (只有 _a，没有 _b)
+```
+
+对应的 lpmake 命令：
 
 ```
 lpmake --metadata-size 65536 --super-name super --block-size 4096 \
   --partition system_a:readonly:SIZE:qti_dynamic_partitions_a --image system_a=system.img \
-  --partition system_b:readonly:0:qti_dynamic_partitions_b \
-  ...（每个分区都是 _a 带镜像 / _b size=0）...
+  ...（每个分区一个 _a）...
   --device super:8321499136 --metadata-slots 3 \
   --group qti_dynamic_partitions_a:8321499136 \
-  --group qti_dynamic_partitions_b:8321499136 \
   --virtual-ab -F --output super.img
 ```
 
 合并版默认 `super_style=split_ab` 完全复刻这套参数（`-F` 输出完整 raw 镜像，
-`sparse=false`），这样 `FlashWindows.bat` 和 TWRP 的 `update-binary` 都能直接刷。
+`sparse=false`），TWRP 的 `update-binary` 和 Windows 线刷脚本都能直接刷。
 XMAPort 原来的单 group 布局仍保留为 `super_style=single`，只建议做实验时用。
+
+卡刷包结构也对齐参考包：`images/super.img.zst`、`images/*.img`、
+`bin/android/{7zzs,zstd}`、`bin/Windows/*`、现生成的 `update-binary` 和
+`X-MiPort-Flash.bat`。
 
 ## 4. 版本跨度（Android 17 → 16）
 

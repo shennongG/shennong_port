@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""打包阶段：super.img → super.zst → 卡刷包 zip
+"""打包阶段：super.img -> images/super.img.zst -> 卡刷包 zip
 
-对应 14PRO_SHALLOW_ROM/make.sh 末尾「生成 super.img / 输出卡刷包」两段：
+输出结构借鉴本机 X-MiPort 4.0.5 的 14 Pro 成品包（F:\\Rom\\X-MiPort-4.0.5）：
 
-    zstd -12 super.img -o super.zst --rm
-    7z a miui_<device>_<port_os_version>.zip images/*
-    rom_name = SHENNONG_ShalloW_<port_os_version>_<md5前10位>_<android>.0.zip
+    bin/android/{7zzs,zstd}       Recovery 里解压/刷写用
+    bin/Windows/{fastboot,...}    线刷脚本用
+    images/super.img.zst          zstd 压缩的 super（TWRP 直接 pipe 刷入）
+    images/*.img                  boot / vbmeta / 基带等固件
+    images/recovery_twrp.img      TWRP（有就带上）
+    META-INF/com/google/android/update-binary   现生成的 TWRP 刷机脚本
+    X-MiPort-Flash.bat                           现生成的 Windows 线刷脚本
 
-差异（合并版有意为之）：
-  * super.img 由 XMAPort 的 lpmake 生成，本文件只负责压缩 + 组装 zip；
-  * 固件镜像从 target_payload 里挑（boot / dtbo / vbmeta* / vendor_boot …），
-    TWRP（精简段 recovery 步骤放入 firmware-update）会覆盖同名文件；
-  * 压缩器优先用 tools/zstd.exe，其次用 Python 3.14 自带 compression.zstd，
-    都没有就把 super.img 原样放进 zip（并明确告警）。
+与参考包一致的关键点：
+  * super 是 raw 7.75 GiB（lpmake -F），zstd 压缩后放 images/super.img.zst；
+  * 卡刷包命名 ShennongPort_Mi14Pro_<版本>_<donor>_<md5>_<安卓>.zip，
+    update-binary 会校验第 5 段 md5；
+  * 固件镜像按 14 Pro 的分区名刷到 _a/_b 两个槽。
 
 用法：
     python tools/package_zip.py [--no-compress] [--dry-run] [--json]
@@ -23,6 +26,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -39,13 +43,44 @@ SEVEN_ZIP = sc.TOOLS / "7z.exe"
 ZSTD = sc.TOOLS / "zstd.exe"
 FLASH_TOOLS = sc.TOOLS / "flashtools.zip"
 
-FIRMWARE_GLOBS = (
-    "boot.img", "init_boot.img", "vendor_boot.img", "dtbo.img", "recovery.img",
-    "vbmeta*.img", "super_empty.img", "modem.img", "dsp.img", "bluetooth.img",
-    "xbl*.img", "abl.img", "tz*.img", "hyp*.img", "keymaster*.img",
-    "spunvm.img", "uefisecapp*.img", "qupfw*.img", "devcfg*.img", "cmnlib*.img",
-    "featenabler*.img", "aop*.img", "multiimgoem*.img", "qseecom*.img",
-)
+DYNAMIC = {"system", "system_ext", "product", "odm", "vendor", "mi_ext",
+           "vendor_dlkm", "system_dlkm", "super"}
+
+# 14 Pro 固件分区 -> images 里的文件名（顺序照参考包 update-binary）
+FLASH_MAP = [
+    ("boot", "boot.img"),
+    ("init_boot", "init_boot.img"),
+    ("vendor_boot", "vendor_boot.img"),
+    ("dtbo", "dtbo.img"),
+    ("vbmeta", "vbmeta.img"),
+    ("vbmeta_system", "vbmeta_system.img"),
+    ("abl", "abl.img"),
+    ("aop", "aop.img"),
+    ("aop_config", "aop_config.img"),
+    ("bluetooth", "bluetooth.img"),
+    ("cpucp", "cpucp.img"),
+    ("cpucp_dtb", "cpucp_dtb.img"),
+    ("devcfg", "devcfg.img"),
+    ("dsp", "dsp.img"),
+    ("featenabler", "featenabler.img"),
+    ("hyp", "hyp.img"),
+    ("imagefv", "imagefv.img"),
+    ("keymaster", "keymaster.img"),
+    ("modem", "modem.img"),
+    ("modemfirmware", "modemfirmware.img"),
+    ("multiimgqti", "multiimgqti.img"),
+    ("qupfw", "qupfw.img"),
+    ("shrm", "shrm.img"),
+    ("spuservice", "spuservice.img"),
+    ("tz", "tz.img"),
+    ("uefi", "uefi.img"),
+    ("uefisecapp", "uefisecapp.img"),
+    ("vm-bootsys", "vm-bootsys.img"),
+    ("xbl", "xbl.img"),
+    ("xbl_config", "xbl_config.img"),
+    ("xbl_ramdump", "xbl_ramdump.img"),
+    ("recovery", "recovery_twrp.img"),
+]
 
 
 def _md5(path, chunk=8 << 20):
@@ -67,7 +102,6 @@ def _free_bytes(path):
 
 
 def _zstd_compress(src, dst, level=12):
-    """返回压缩器名称；失败返回空串。"""
     if ZSTD.is_file():
         cmd = [str(ZSTD), "-q", "-f", "-{}".format(level), "-T0", str(src), "-o", str(dst)]
         if subprocess.run(cmd).returncode == 0 and dst.is_file():
@@ -75,20 +109,17 @@ def _zstd_compress(src, dst, level=12):
         return ""
     try:
         from compression import zstd as _zstd  # Python 3.14+
-        data = Path(src).read_bytes()
-        Path(dst).write_bytes(_zstd.compress(data, level=level))
+        Path(dst).write_bytes(_zstd.compress(Path(src).read_bytes(), level=level))
         return "python-compression.zstd"
     except Exception:
         return ""
 
 
 def _touch_tree(root, epoch=1230768000):
-    """把 staging 里所有文件的 mtime 固定（2009-01-01），让 zip 可复现。"""
     for cur, dirs, files in os.walk(str(root)):
         for name in files + dirs:
-            p = os.path.join(cur, name)
             try:
-                os.utime(p, (epoch, epoch))
+                os.utime(os.path.join(cur, name), (epoch, epoch))
             except OSError:
                 pass
     try:
@@ -97,27 +128,197 @@ def _touch_tree(root, epoch=1230768000):
         pass
 
 
+def _versions(cfg, donor):
+    v = sp.detect_versions(cfg)
+    return {
+        "port": v.get("port_os_version") or "UNKNOWN",
+        "base": v.get("vendor_os_version") or "UNKNOWN",
+        "donor": donor or "donor",
+        "android": v.get("android_version") or "14",
+    }
+
+
+def _url_codename(url):
+    """.../madrid-ota_full-OS4...zip -> madrid"""
+    name = url.split("?", 1)[0].rstrip("/").split("/")[-1] if url else ""
+    m = re.match(r"^([A-Za-z0-9_]+)-ota", name)
+    return m.group(1).lower() if m else ""
+
+
+def _stage_tools(stage):
+    """展开 flashtools：bin/android、bin/Windows、META-INF 骨架。"""
+    if FLASH_TOOLS.is_file():
+        with zipfile.ZipFile(str(FLASH_TOOLS)) as z:
+            z.extractall(str(stage))
+        p = stage / "FlashWindows.bat"
+        if p.is_file():
+            p.unlink()
+    # TWRP updater 用 7zzs 支持 zip64（flashtools 里只有 busybox/zstd）
+    seven = sc.TOOLS / "xmiport" / "7zzs"
+    if seven.is_file():
+        dest = stage / "bin" / "android" / "7zzs"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(seven), str(dest))
+    (stage / "images").mkdir(parents=True, exist_ok=True)
+
+
 def _stage_firmware(stage):
-    """把 target_payload 里的固件镜像复制进 firmware-update。"""
-    fw = stage / "firmware-update"
-    fw.mkdir(parents=True, exist_ok=True)
+    """复制 14 Pro 固件镜像到 images/（排除动态分区）。"""
+    images = stage / "images"
+    images.mkdir(parents=True, exist_ok=True)
     count = 0
     if sc.TGT_UNPACK.is_dir():
-        for pat in FIRMWARE_GLOBS:
-            for f in sc.TGT_UNPACK.glob(pat):
-                if f.is_file() and f.name.lower() != "super.img":
-                    shutil.copy2(str(f), str(fw / f.name))
-                    count += 1
-    # TWRP（精简段放的）覆盖同名
-    extra = sc.TGT_UNPACK / "firmware-update"
-    if extra.is_dir():
-        for f in extra.rglob("*"):
-            if f.is_file():
-                dest = fw / f.relative_to(extra)
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(str(f), str(dest))
-                count += 1
+        for f in sc.TGT_UNPACK.glob("*.img"):
+            if f.stem.lower() in DYNAMIC:
+                continue
+            shutil.copy2(str(f), str(images / f.name))
+            count += 1
+    twrp = sc.TGT_UNPACK / "firmware-update" / "recovery.img"
+    if twrp.is_file():
+        shutil.copy2(str(twrp), str(images / "recovery_twrp.img"))
     return count
+
+
+def _present_images(stage):
+    images = stage / "images"
+    return [(part, name) for part, name in FLASH_MAP if (images / name).is_file()]
+
+
+def _write_updater(stage, info):
+    lines = [
+        "#!/sbin/sh",
+        "",
+        'OUTFD=/proc/self/fd/$2',
+        'ZIPFILE="$3"',
+        "",
+        "ui_print() {",
+        '  echo -e "ui_print $1\\nui_print" >>$OUTFD;',
+        "}",
+        "",
+        "package_extract_file() {",
+        '  ui_print "- flashing $(basename $2)"',
+        '  /tmp/bin/android/7zzs e -so "$ZIPFILE" "$1" > "$2"',
+        "}",
+        "",
+        "package_extract_zstd() {",
+        '  ui_print "- flashing super (zstd)"',
+        '  /tmp/bin/android/7zzs e -so "$ZIPFILE" "$1" | /tmp/bin/android/zstd -d -c > "$2"',
+        "}",
+        "",
+        "checkDevice() {",
+        '  myDevice=$(getprop ro.product.name)',
+        '  ui_print "  device: $myDevice"',
+        '  if [ "$(echo $myDevice | grep shennong)" == "" ]; then',
+        '    ui_print "- device mismatch, abort"',
+        "    exit 1",
+        "  fi",
+        "}",
+        "",
+        'ui_print " "',
+        'ui_print "  ShennongPort (port -> slim -> pack)"',
+        'ui_print "  target : Xiaomi 14 Pro (shennong)"',
+        'ui_print "  donor  : @@DONOR@@ / @@PORT@@"',
+        'ui_print "  base   : @@BASE@@"',
+        'ui_print "  android: @@ANDROID@@"',
+        'ui_print " "',
+        "",
+        "[ -d /tmp ] && rm -rf /tmp",
+        "mkdir -p /tmp",
+        'unzip "$ZIPFILE" bin/android/zstd -d /tmp',
+        'unzip "$ZIPFILE" bin/android/7zzs -d /tmp',
+        "chmod -R 0755 /tmp",
+        "",
+        "checkDevice",
+        "",
+        'romName=$(basename $ZIPFILE)',
+        'if echo "$romName" | grep -q "ShennongPort"; then',
+        '  ui_print "- checking md5"',
+        '  myHash=$(md5sum $ZIPFILE | head -c 10)',
+        '  realHash=$(echo $romName | cut -d "_" -f 5)',
+        '  if [ "$myHash" != "$realHash" ]; then',
+        '    ui_print "- md5 mismatch: $myHash != $realHash"',
+        "    exit 250",
+        "  fi",
+        "fi",
+        "",
+        'ui_print "- flashing firmware"',
+        "dd if=/dev/zero of=/dev/block/bootdevice/by-name/frp",
+    ]
+    for part, name in _present_images(stage):
+        for slot in ("a", "b"):
+            lines.append(
+                'package_extract_file "images/{0}" "/dev/block/bootdevice/by-name/{1}_{2}"'.format(
+                    name, part, slot))
+    lines += [
+        "",
+        "if [ -f images/super.img.zst ]; then",
+        '  package_extract_zstd "images/super.img.zst" "/dev/block/bootdevice/by-name/super"',
+        "fi",
+        "",
+        "for pname in odm mi_ext system vendor product system_ext odm_dlkm vendor_dlkm system_dlkm mi_product; do",
+        "  [ -e /dev/block/mapper/${pname}_a ] && lptools unmap ${pname}_a && lptools map ${pname}_a",
+        "done",
+        "",
+        "mount /data 2>/dev/null",
+        "rm -rf /data/dalvik-cache/arm/* /data/dalvik-cache/arm64/* /data/system/package_cache/*",
+        "bootctl set-active-boot-slot a",
+        'ui_print "- done"',
+        "exit 0",
+        "",
+    ]
+    text = "\n".join(lines)
+    for key, val in (("@@DONOR@@", info["donor"]), ("@@PORT@@", info["port"]),
+                     ("@@BASE@@", info["base"]), ("@@ANDROID@@", info["android"])):
+        text = text.replace(key, str(val))
+    dest = stage / "META-INF" / "com" / "google" / "android" / "update-binary"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(text, encoding="utf-8", newline="\n")
+    return dest
+
+
+def _write_flash_bat(stage, info):
+    lines = [
+        "@echo off",
+        "cd %~dp0",
+        "chcp 936 >nul",
+        "title ShennongPort 14 Pro fastboot flash",
+        "echo ============================================",
+        "echo   ShennongPort  (port -^> slim -^> pack)",
+        "echo   target : Xiaomi 14 Pro (shennong)",
+        "echo   donor  : {donor} / {port}".format(**info),
+        "echo   base   : {base}".format(**info),
+        "echo ============================================",
+        "echo.",
+        "if not exist bin\\Windows\\fastboot.exe (",
+        "  echo [!] bin\\Windows missing, please extract the zip completely",
+        "  pause & exit /b 1",
+        ")",
+        "if exist images\\super.img.zst (",
+        "  echo [*] decompressing super.img.zst ...",
+        "  bin\\Windows\\zstd.exe --rm -d images\\super.img.zst -o images\\super.img",
+        "  if errorlevel 1 ( echo [!] decompress failed & pause & exit /b 1 )",
+        ")",
+        "bin\\Windows\\fastboot getvar product 2>&1 | findstr /i shennong >nul",
+        "if errorlevel 1 (",
+        "  echo [!] product is not shennong, abort",
+        "  pause & exit /b 1",
+        ")",
+        "echo [*] flashing firmware ...",
+    ]
+    for part, name in _present_images(stage):
+        lines.append("bin\\Windows\\fastboot flash {0}_a images\\{1}".format(part, name))
+        lines.append("bin\\Windows\\fastboot flash {0}_b images\\{1}".format(part, name))
+    lines += [
+        "echo [*] flashing super ...",
+        "bin\\Windows\\fastboot flash super images\\super.img",
+        "echo.",
+        "echo [*] done. 'invalid sparse file format' is normal.",
+        "pause",
+        "",
+    ]
+    dest = stage / "X-MiPort-Flash.bat"
+    dest.write_text("\r\n".join(lines), encoding="gbk", errors="replace")
+    return dest
 
 
 def build(cfg, compress=None, dry_run=False, quiet=False):
@@ -129,23 +330,21 @@ def build(cfg, compress=None, dry_run=False, quiet=False):
         raw = str(cfg.get("flat", {}).get("super_compress", "zstd")).strip().lower()
         compress = raw not in ("none", "false", "0", "off")
 
-    name_hint = _rom_name(cfg, md5="0000000000")
+    donor = _url_codename(
+        cfg.get("sections", {}).get("source", {}).get("url", "")) or "donor"
+    info = _versions(cfg, donor)
     if dry_run:
-        return 0, {"dry_run": True, "would_build": name_hint,
+        return 0, {"dry_run": True, "would_build": _rom_name(info, "0000000000"),
                    "super": str(super_img), "compress": compress}
 
     stage = sc.WORKSPACE / "package_stage"
     if stage.exists():
-        try:
-            shutil.rmtree(str(stage), ignore_errors=True)
-        except OSError:
-            pass
+        shutil.rmtree(str(stage), ignore_errors=True)
     stage.mkdir(parents=True, exist_ok=True)
-
-    # 1) 固件
+    _stage_tools(stage)
     fw_count = _stage_firmware(stage)
     if not quiet:
-        print("  [pack] firmware-update: {} 个镜像".format(fw_count))
+        print("  [pack] images/: {} 个固件镜像".format(fw_count))
 
     keep_raw = str(cfg.get("flat", {}).get("keep_super_img", "false")).strip().lower() == "true"
     cleanup = str(cfg.get("flat", {}).get("cleanup_intermediate", "true")).strip().lower() == "true"
@@ -155,60 +354,40 @@ def build(cfg, compress=None, dry_run=False, quiet=False):
         print("  [pack] super.img {}, 剩余磁盘 {}".format(
             sc.human(super_bytes), sc.human(free) if free >= 0 else "?"))
 
-    # 2) super 压缩（先确认磁盘装得下 zst，再动手）
+    images = stage / "images"
+    zst = images / "super.img.zst"
     zstd_name = ""
     if compress:
-        need = int(super_bytes * 0.55) + (200 << 20)
+        need = int(super_bytes * 0.9) + (200 << 20)
         if 0 <= free < need:
             return 1, {"error": "磁盘不足：压缩 super 需要约 {}，只剩 {}。"
                                 "可设 keep_super_img=false / 清理 workspace/download_*".format(
                                     sc.human(need), sc.human(free))}
         level = sc.cfg_int(cfg, "zstd_level", 12)
         if not quiet:
-            print("  [pack] 压缩 super.img (zstd level {}) ...".format(level))
-        zstd_name = _zstd_compress(super_img, stage / "super.zst", level)
-        if zstd_name:
-            if not quiet:
-                print("  [pack] super.zst 完成 ({})".format(zstd_name))
-            # raw super 占 7.75 GiB；zip 里已经有 zst，默认不再保留 raw
-            if not keep_raw:
-                try:
-                    super_img.unlink()
-                    if not quiet:
-                        print("  [pack] 已删除 raw super.img（keep_super_img=false）")
-                except OSError:
-                    pass
-        else:
-            if not quiet:
-                print("  [pack] [!] 没有可用的 zstd，改为直接打包 super.img")
-    if not (stage / "super.zst").is_file():
-        # 不复制 7.75GB：同盘硬链接，失败才退回复制
-        link = stage / "super.img"
-        try:
-            os.link(str(super_img), str(link))
-        except OSError:
+            print("  [pack] 压缩 images/super.img.zst (zstd level {}) ...".format(level))
+        zstd_name = _zstd_compress(super_img, zst, level)
+        if not zstd_name:
+            return 1, {"error": "zstd 压缩失败（磁盘不足？）"}
+        if not keep_raw:
             try:
-                shutil.copy2(str(super_img), str(link))
-            except OSError as e:
-                return 1, {"error": "无法把 super.img 放进 staging: {}".format(e)}
+                super_img.unlink()
+                if not quiet:
+                    print("  [pack] 已删除 raw super.img（keep_super_img=false）")
+            except OSError:
+                pass
+    else:
+        shutil.copy2(str(super_img), str(images / "super.img"))
 
-    # 3) 刷机脚本
-    if FLASH_TOOLS.is_file():
-        with zipfile.ZipFile(str(FLASH_TOOLS)) as z:
-            z.extractall(str(stage))
-        if not quiet:
-            print("  [pack] 刷机脚本已展开")
-    elif not quiet:
-        print("  [pack] [!] tools/flashtools.zip 缺失，zip 里不会有刷机脚本")
+    _write_updater(stage, info)
+    _write_flash_bat(stage, info)
 
-    # 4) 固定时间戳（可复现）后 7z 打包
     _touch_tree(stage)
     if not SEVEN_ZIP.is_file():
         return 1, {"error": "tools/7z.exe 缺失"}
-    zst = stage / "super.zst"
     payload_bytes = zst.stat().st_size if zst.is_file() else super_bytes
     free = _free_bytes(sc.WORKSPACE)
-    need = payload_bytes + (200 << 20)
+    need = payload_bytes + (300 << 20)
     if 0 <= free < need:
         return 1, {"error": "磁盘不足：7z 打包需要约 {}，只剩 {}。"
                             "可删 workspace/download_* 或已解压的 source_rom/target_rom".format(
@@ -218,13 +397,12 @@ def build(cfg, compress=None, dry_run=False, quiet=False):
         tmp_zip.unlink()
     cmd = [str(SEVEN_ZIP), "a", "-tzip", "-mx=1", str(tmp_zip), str(stage / "*")]
     if not quiet:
-        print("  [pack] 7z 打包中（super 镜像很大，需要几分钟）...")
-    rc = subprocess.run(cmd).returncode
-    if rc != 0 or not tmp_zip.is_file():
-        return 1, {"error": "7z 打包失败 (rc={})".format(rc)}
+        print("  [pack] 7z 打包中（super.zst 约 6~7 GB，需要几分钟）...")
+    if subprocess.run(cmd).returncode != 0 or not tmp_zip.is_file():
+        return 1, {"error": "7z 打包失败（rc=2 通常是磁盘不足）"}
 
     md5 = _md5(tmp_zip)
-    rom_name = _rom_name(cfg, md5=md5)
+    rom_name = _rom_name(info, md5)
     sc.OUT_DIR.mkdir(parents=True, exist_ok=True)
     final = sc.OUT_DIR / rom_name
     if final.exists():
@@ -232,12 +410,8 @@ def build(cfg, compress=None, dry_run=False, quiet=False):
     os.replace(tmp_zip, final)
     size = final.stat().st_size
 
-    # 5) 清理 staging（zst / 刷机脚本 / super 硬链接），CI 上能省 4~5 GB
     if cleanup:
-        try:
-            shutil.rmtree(str(stage), ignore_errors=True)
-        except OSError:
-            pass
+        shutil.rmtree(str(stage), ignore_errors=True)
 
     summary = {
         "rom_name": rom_name,
@@ -247,8 +421,9 @@ def build(cfg, compress=None, dry_run=False, quiet=False):
         "compressor": zstd_name or "none",
         "firmware_images": fw_count,
         "super_bytes": super_bytes,
+        "layout": "xmiport/images",
         "ts": int(time.time()),
-        "versions": sp.detect_versions(cfg),
+        "versions": info,
     }
     try:
         (sc.OUT_DIR / (rom_name + ".json")).write_text(
@@ -258,11 +433,9 @@ def build(cfg, compress=None, dry_run=False, quiet=False):
     return 0, summary
 
 
-def _rom_name(cfg, md5):
-    v = sp.detect_versions(cfg)
-    ver = v.get("port_os_version") or v.get("vendor_os_version") or "UNKNOWN"
-    android = v.get("android_version") or "14"
-    return "SHENNONG_ShalloW_{}_{}_{}.0.zip".format(ver, md5[:10], android)
+def _rom_name(info, md5):
+    return "ShennongPort_Mi14Pro_{ver}_{donor}_{md5}_{android}.zip".format(
+        ver=info["port"], donor=info["donor"], md5=md5[:10], android=info["android"])
 
 
 def main():
@@ -271,8 +444,8 @@ def main():
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
-    ap = argparse.ArgumentParser(description="打包卡刷包 zip")
-    ap.add_argument("--no-compress", action="store_true", help="不压缩 super.img")
+    ap = argparse.ArgumentParser(description="打包卡刷包 zip（X-MiPort 布局）")
+    ap.add_argument("--no-compress", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
