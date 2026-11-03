@@ -29,7 +29,9 @@ BD = "\x1b[1m"
 
 # ---------------- 控制常量 ----------------
 DEBUG_MODE = "1"
-TOOL_TIMEOUT = 10 * 60
+# 外部工具默认超时 1 小时：12 GB 的 payload 在 CI 上解包经常超过 10 分钟，
+# 8 GB 分区用 lz4hc,9 重打包也可能超过 10 分钟。
+TOOL_TIMEOUT = 60 * 60
 
 # auto 模式标志（--auto CLI），控制是否静默外部工具实时进度输出
 AUTO_MODE = False
@@ -172,18 +174,19 @@ def is_safe_device_name(name):
     return bool(DEVICE_NAME_RE.fullmatch(name.strip()))
 
 
-def run_tool(cmd, **kwargs):
-    # 外部工具超过 10 分钟仍未退出时终止，避免流程永久挂起。
+def run_tool(cmd, timeout=None, **kwargs):
+    # 外部工具超时（默认 TOOL_TIMEOUT，payload 解包可单独调大）
     label = Path(cmd[0]).name if cmd else "external tool"
+    limit = int(timeout or TOOL_TIMEOUT)
     try:
-        return subprocess.run(cmd, timeout=TOOL_TIMEOUT, **kwargs)
+        return subprocess.run(cmd, timeout=limit, **kwargs)
     except FileNotFoundError:
         err("{} not found (tool missing or blocked by antivirus)".format(label))
         log_write("ERROR: tool not found: {}".format(cmd[0]))
         return subprocess.CompletedProcess(cmd, 127, stdout="", stderr="")
     except subprocess.TimeoutExpired:
-        err("{} timed out after {} minutes".format(label, TOOL_TIMEOUT // 60))
-        log_write("ERROR: {} timed out after {} seconds".format(label, TOOL_TIMEOUT))
+        err("{} timed out after {} minutes".format(label, limit // 60))
+        log_write("ERROR: {} timed out after {} seconds".format(label, limit))
         return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
 
 
@@ -420,6 +423,10 @@ def read_packing_config():
         "cleanup_payload_images": "true",  # 解包成文件系统后删除不用的 payload 镜像
         "keep_super_img": "false",    # zip 成功后是否保留 raw super.img（7.75GB）
         "strict_target": "true",      # 目标代号必须等于 [shennong] device
+        "payload_timeout": "3600",    # payload 解包超时（秒）
+        "payload_concurrency": "8",   # payload-dumper-go 并发
+        "payload_parts_source": "system,system_ext,product",
+        "payload_parts_target": "",   # 空 = 全部（固件镜像也要）
     }
     if CONFIG.exists():
         for raw in CONFIG.read_text(encoding="gbk", errors="ignore").splitlines():
@@ -749,12 +756,13 @@ REQUIRED_PAYLOAD_IMAGES = {
 }
 
 
-def check_payload_extracted(target_dir):
+def check_payload_extracted(target_dir, required=None):
     target_dir = Path(target_dir)
     if not target_dir.exists():
         return False
     found = {p.name.lower() for p in target_dir.rglob("*.img") if p.is_file()}
-    if len(found) >= 6 and REQUIRED_PAYLOAD_IMAGES.issubset(found):
+    need = set(required) if required else set(REQUIRED_PAYLOAD_IMAGES)
+    if need.issubset(found):
         info("Already extracted ({} partition images, required partitions present), skipping.".format(
             len(found)))
         return True
@@ -775,7 +783,7 @@ def detect_rom_format(rom_dir):
     return "img", None
 
 
-def extract_payload_bin(rom_dir, out_dir):
+def extract_payload_bin(rom_dir, out_dir, partitions=None, timeout=None, concurrency=None):
     rom_dir = Path(rom_dir)
     out_dir = Path(out_dir)
     os.makedirs(out_dir, exist_ok=True)
@@ -784,14 +792,25 @@ def extract_payload_bin(rom_dir, out_dir):
 
     if fmt == "payload":
         info("Found payload.bin (A/B OTA), extracting...")
-        cmd = [str(PDUMP), "-o", str(out_dir), str(payload_file)]
+        cmd = [str(PDUMP), "-o", str(out_dir)]
+        if partitions:
+            cmd += ["-p", ",".join(partitions)]
+            info("Only extracting: {}".format(",".join(partitions)))
+        if concurrency:
+            try:
+                c = max(1, min(int(concurrency), 16))
+                cmd += ["-c", str(c)]
+                info("payload-dumper-go concurrency: {}".format(c))
+            except Exception:
+                pass
+        cmd.append(str(payload_file))
         if AUTO_MODE:
-            proc = run_tool(cmd, stdout=subprocess.PIPE,
+            proc = run_tool(cmd, timeout=timeout, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True,
                             errors="replace")
             rc = proc.returncode
         else:
-            rc = run_tool(cmd).returncode
+            rc = run_tool(cmd, timeout=timeout).returncode
         if rc != 0:
             err("payload-dumper-go failed")
             if AUTO_MODE and proc.stdout:
@@ -1932,14 +1951,30 @@ def one_click_port(auto=False, stage="all", offline=False):
     # ---------------- Step 3: 解包 payload ----------------
     info("=== Step 3/8: Extract payload ===")
     log_write("Step 3: Extract payload start")
-    if not check_payload_extracted(SRC_UNPACK):
-        info("[1/2] Extracting source payload...")
-        if extract_payload_bin(SRC_ROM, SRC_UNPACK) != 0:
+
+    def _parts(key):
+        return [p.strip() for p in str(pack_cfg.get(key, "")).replace(";", ",").split(",") if p.strip()]
+
+    src_parts = _parts("payload_parts_source")
+    tgt_parts = _parts("payload_parts_target")
+    payload_timeout = int(str(pack_cfg.get("payload_timeout", "3600")).strip() or 3600)
+    payload_conc = str(pack_cfg.get("payload_concurrency", "8")).strip() or "8"
+    src_done = (SRC_FS / "system").is_dir() and (SRC_FS / "product").is_dir()
+    tgt_done = (TGT_FS / "odm").is_dir()
+    if src_done:
+        info("[1/2] Source filesystem already unpacked, skip payload extraction")
+    if not src_done and not check_payload_extracted(SRC_UNPACK, required=src_parts or None):
+        info("[1/2] Extracting source payload... (timeout {} min)".format(payload_timeout // 60))
+        if extract_payload_bin(SRC_ROM, SRC_UNPACK, partitions=src_parts or None,
+                               timeout=payload_timeout, concurrency=payload_conc) != 0:
             return _abort_port(auto, "Step 3 failed: source payload extraction")
         log_write("Source payload extracted to: {}".format(SRC_UNPACK))
-    if not check_payload_extracted(TGT_UNPACK):
-        info("[2/2] Extracting target payload...")
-        if extract_payload_bin(TGT_ROM, TGT_UNPACK) != 0:
+    if tgt_done:
+        info("[2/2] Target filesystem already unpacked, skip payload extraction")
+    if not tgt_done and not check_payload_extracted(TGT_UNPACK, required=tgt_parts or None):
+        info("[2/2] Extracting target payload... (timeout {} min)".format(payload_timeout // 60))
+        if extract_payload_bin(TGT_ROM, TGT_UNPACK, partitions=tgt_parts or None,
+                               timeout=payload_timeout, concurrency=payload_conc) != 0:
             return _abort_port(auto, "Step 3 failed: target payload extraction")
         log_write("Target payload extracted to: {}".format(TGT_UNPACK))
     info("Step 3 done")

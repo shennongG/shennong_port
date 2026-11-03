@@ -46,6 +46,10 @@ notepad config.ini        :: device_platform / device_size / 两个 ROM 直链
 python XMAPort.py --auto --device shennong
 ```
 
+> Step 3 默认只解源包的 `system,system_ext,product`（省几 GB、也快很多），
+> 目标包解全量（固件镜像要进卡刷包）；payload 超时 60 分钟、并发 8，
+> 都可在 `config.ini [settings]` 调整。
+
 产物：
 
 ```
@@ -256,7 +260,8 @@ shennong_port/
 ## 7. 测试
 
 ```bat
-python tests\test_stages.py        :: 单元回归（合成数据 + 假资源）
+python tests\test_stages.py        :: 精简/修补单元回归（合成数据 + 假资源）
+python tests\test_payload_args.py  :: payload 分区过滤/并发/超时 参数测试
 python tests\make_fixture.py       :: 生成合成工作区
 python XMAPort.py --auto --stage slim --device shennong --offline
 python XMAPort.py --auto --stage pack --device shennong

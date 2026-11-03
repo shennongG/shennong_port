@@ -106,6 +106,13 @@ workspace/output/ShennongPort_Mi14Pro_<版本>_<donor>_<md5>_<安卓>.zip
 还报错时按顺序手动删：`workspace/download_source`、`workspace/download_target`、
 `workspace/source_rom`、`workspace/target_rom`、`workspace/package_stage`。
 
+**Q：Step 3 报 `payload-dumper-go timed out after 10 minutes`？**
+12 GB 的 18 Pro Max 包在 CI 上解包会超过 10 分钟。本版已：
+* 默认超时改为 60 分钟（`[settings] payload_timeout=3600`）；
+* 源包只解 `system,system_ext,product`（`payload_parts_source`），省时间也省磁盘；
+* 并发从 4 提到 8（`payload_concurrency=8`，内存小的机器可降到 4）。
+如果仍然超时，把 `payload_timeout=7200`，或在本地先解包后把 `url` 留空复用工作区。
+
 **Q：`--selftest` 报缺 tools/xxx？**
 解压不完整，或用了旧版仓库。重新拉取仓库（`tools/` 必须完整，含 `jre/`、`flashtools.zip`）。
 
