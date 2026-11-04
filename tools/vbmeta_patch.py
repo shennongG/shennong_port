@@ -4,8 +4,10 @@
 #
 # AVB flags 是位于 rollback_index 之后、release string 之前的 4 字节大端字段。
 # 已验证的 Android 实现通过下面 16 字节特征定位并替换，而不是写固定偏移：
-#   00000000 00000000 "avbtool " -> 00000002 00000000 "avbtool "
-# 其中 0x00000002 表示 AVB_VBMETA_IMAGE_FLAGS_VERIFICATION_DISABLED。
+#   00000000 00000000 "avbtool " -> 00000003 00000000 "avbtool "
+# 0x1 = AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED（dm-verity）
+# 0x2 = AVB_VBMETA_IMAGE_FLAGS_VERIFICATION_DISABLED（AVB 校验）
+# 0x3 = 两者都关（移植 super 必须，和 fastboot --disable-verity --disable-verification 等价）
 #
 # 用法:
 #     python vbmeta_patch.py <文件或目录> [<文件或目录> ...]
@@ -19,7 +21,9 @@ import sys
 AVB_MAGIC = b"AVB0"
 AVB_MAGIC_LEN = 4
 UNPATCHED_PATTERN = bytes.fromhex("0000000000000000617662746F6F6C20")
-PATCHED_PATTERN = bytes.fromhex("0000000200000000617662746F6F6C20")
+PATCHED_PATTERN = bytes.fromhex("0000000300000000617662746F6F6C20")
+# 只关了 verification（0x2）的旧补丁也升级成 0x3（verity + verification 都关）
+HALF_PATTERN = bytes.fromhex("0000000200000000617662746F6F6C20")
 
 
 def patch_one(path):
@@ -31,18 +35,22 @@ def patch_one(path):
             if len(data) < AVB_MAGIC_LEN or data[:AVB_MAGIC_LEN] != AVB_MAGIC:
                 return ("invalid", "not a vbmeta image (magic mismatch)")
             has_unpatched = UNPATCHED_PATTERN in data
+            has_half = HALF_PATTERN in data
             has_patched = PATCHED_PATTERN in data
-            if not has_unpatched:
+            if not has_unpatched and not has_half:
                 if has_patched:
-                    return ("skipped", "flags already 0x00000002 (idempotent)")
+                    return ("skipped", "flags already 0x00000003 (idempotent)")
                 return ("error", "expected flags/avbtool pattern not found")
-            data = data.replace(UNPATCHED_PATTERN, PATCHED_PATTERN)
+            if has_unpatched:
+                data = data.replace(UNPATCHED_PATTERN, PATCHED_PATTERN)
+            if has_half:
+                data = data.replace(HALF_PATTERN, PATCHED_PATTERN)
             f.seek(0)
             f.write(data)
             f.truncate()
             f.flush()
             os.fsync(f.fileno())
-            return ("patched", "flags 0x00000000 -> 0x00000002")
+            return ("patched", "flags -> 0x00000003 (verity+verification disabled)")
     except OSError as e:
         return ("error", str(e))
 

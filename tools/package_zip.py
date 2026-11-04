@@ -196,7 +196,10 @@ def _stage_firmware(stage, cfg=None):
         for f in sc.TGT_UNPACK.glob("*.img"):
             if f.stem.lower() in DYNAMIC:
                 continue
-            shutil.copy2(str(f), str(images / f.name))
+            # 优先用打包阶段修补过的镜像（vbmeta* 已禁验），否则用原始固件
+            patched = sc.PACK_OUT / f.name
+            src = patched if patched.is_file() else f
+            shutil.copy2(str(src), str(images / f.name))
             count += 1
 
     flat = (cfg or {}).get("flat", {}) if isinstance(cfg, dict) else {}
@@ -479,19 +482,48 @@ def _write_flash_bat(stage, info):
         ]
     lines += ["echo [*] flashing firmware ..."]
     for part, name in fw:
-        lines.append("bin\\Windows\\fastboot flash {0}_a images\\{1}".format(part, name))
-        lines.append("bin\\Windows\\fastboot flash {0}_b images\\{1}".format(part, name))
+        if part in ("vbmeta", "vbmeta_system"):
+            # 与参考脚本一致：刷 vbmeta 时同时关闭 verity + verification
+            prefix = "bin\\Windows\\fastboot --disable-verity --disable-verification flash"
+        else:
+            prefix = "bin\\Windows\\fastboot flash"
+        lines.append("{0} {1}_a images\\{2}".format(prefix, part, name))
+        lines.append("{0} {1}_b images\\{2}".format(prefix, part, name))
     lines += [
         "echo [*] flashing super ...",
         "bin\\Windows\\fastboot flash super images\\super.img",
         "echo.",
+        "echo [*] set active slot a ...",
+        "bin\\Windows\\fastboot set_active a",
+        "echo.",
         "echo [*] done. 'invalid sparse file format' is normal.",
+        "echo [*] rebooting ...",
+        "bin\\Windows\\fastboot reboot",
         "pause",
         "",
     ]
     dest = stage / "Flash-Windows.bat"
     dest.write_text("\n".join(lines), encoding="gbk", errors="replace")
     return dest
+
+
+def _check_vbmeta(images):
+    """确认打包的 vbmeta 已经关了 verity+verification（TWRP 卡刷靠它）。"""
+    pat = bytes.fromhex("0000000300000000617662746F6F6C20")
+    bad = []
+    for p in images.glob("vbmeta*.img"):
+        try:
+            d = p.read_bytes()
+        except OSError:
+            continue
+        if not d.startswith(b"AVB0") or pat not in d:
+            bad.append(p.name)
+    if bad:
+        print("  [pack] [!] vbmeta 未打 0x3 补丁: {}".format(",".join(bad)))
+        print("  [pack] [!] 线刷会用 --disable-verity --disable-verification，"
+              "但 TWRP 卡刷可能因 dm-verity 卡一屏")
+    else:
+        print("  [pack] vbmeta: verity + verification 已关闭")
 
 
 def _write_readme(stage, info):
@@ -560,6 +592,7 @@ def build(cfg, compress=None, dry_run=False, quiet=False):
     stage.mkdir(parents=True, exist_ok=True)
     _stage_tools(stage)
     fw_count = _stage_firmware(stage, cfg)
+    _check_vbmeta(stage / "images")
     if not quiet:
         print("  [pack] images/: {} 个固件镜像".format(fw_count))
 

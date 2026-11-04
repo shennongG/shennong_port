@@ -196,6 +196,11 @@ asset_base=https://ghfast.top/https://raw.githubusercontent.com/XHR222/14PRO_SHA
 > 该命名让 update-binary 能取文件名第 5 段做 MD5 校验；固件按 14 Pro 的分区名
 > 刷到 `_a/_b` 两个槽，和参考包一致。
 
+> **vbmeta 必须禁验**：`patch_vbmeta` 会把 `vbmeta*.img` 的 AVB flags 改成
+> `0x3`（dm-verity + AVB 都关），线刷脚本另外带
+> `--disable-verity --disable-verification`，并在最后 `set_active a` + `reboot`。
+> 旧包如果卡第一屏，先用这一版重打包再刷。
+
 ### Recovery 与 ROOT 补丁
 
 仓库里已经带好一套 14 Pro 可用的补丁（`assets/root_images/`）：

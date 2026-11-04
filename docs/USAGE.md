@@ -136,6 +136,44 @@ workspace/output/ShennongPort_Mi14Pro_<版本>_<donor>_<md5>_<安卓>.zip
 （sync_apex 要跑）；最后用 `--no-slim` 排除精简删多了。详见
 [PORT_18PROMAX_TO_14PRO.md](PORT_18PROMAX_TO_14PRO.md)。
 
+**Q：线刷刷完一直停在 fastboot，手动重启卡第一屏？**
+先确认用的是**新版包**（旧包没有 `set_active`、`reboot`，vbmeta 也没禁 verity）。
+新版线刷脚本会做：
+
+```
+fastboot --disable-verity --disable-verification flash vbmeta_a/b images\vbmeta.img
+fastboot --disable-verity --disable-verification flash vbmeta_system_a/b images\vbmeta_system.img
+fastboot flash super images\super.img
+fastboot set_active a
+fastboot reboot
+```
+
+如果还卡第一屏，按顺序手动试：
+
+```bat
+:: 0) 确认槽位和 super 大小
+fastboot getvar current-slot
+fastboot getvar partition-size:super      :: 必须 >= 8321499136
+
+:: 1) 重新禁 verity + 切 a 槽
+fastboot --disable-verity --disable-verification flash vbmeta images\vbmeta.img
+fastboot --disable-verity --disable-verification flash vbmeta_system images\vbmeta_system.img
+fastboot set_active a
+
+:: 2) 只刷官方 boot/init_boot，看能不能过第一屏
+fastboot flash boot_a images\boot.img
+fastboot flash boot_b images\boot.img
+fastboot flash init_boot_a images\init_boot_official.img
+fastboot flash init_boot_b images\init_boot_official.img
+fastboot reboot
+```
+
+- 能进 TWRP 但进不了系统 → 大概率是 Android 17 → 16 的 VNDK/框架不兼容，
+  换更接近的源包/底包，或 `--no-slim` 重打一次排除精简问题；
+- 连 TWRP 都进不去 → boot/init_boot/vbmeta 与底包不匹配，重刷底包后再试；
+- 打包日志里 `[pack] [!] vbmeta 未打 0x3 补丁` → 这次 `patch_vbmeta` 失败，
+  检查 `workspace/packed/vbmeta.img` 是否来自底包、`patch_vbmeta=true`。
+
 **Q：super.img 是 7.75 GiB 整？**
 `super_style=split_ab` 用了 `-F`，lpmake 会输出完整 raw 镜像（与 参考成品包一致）。
 zip 里是 `images/super.img.zst`，体积由实际数据决定，刷入前脚本会解压。
