@@ -42,7 +42,10 @@ param(
     [switch]$AllRefs,
     # 有些 Windows 机器的 schannel TUF/证书链有问题，走 OpenSSL 后端更稳；异常时改回 schannel
     [ValidateSet('openssl', 'schannel')]
-    [string]$SslBackend = 'openssl'
+    [string]$SslBackend = 'openssl',
+
+    # 没给令牌时从剪贴板取（在浏览器里生成令牌 -> 复制 -> 直接跑本脚本）
+    [switch]$UseClipboard
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,6 +55,16 @@ $env:PYTHONIOENCODING = 'utf-8'
 
 function Step($name) { Write-Host ''; Write-Host ("=== {0}" -f $name) -ForegroundColor Cyan }
 
+if (-not $Token -and $UseClipboard) {
+    $clip = (Get-Clipboard -Raw -ErrorAction SilentlyContinue)
+    if ($clip) { $clip = $clip.Trim() }
+    if ($clip -match '^[A-Za-z0-9_\-]{20,64}$') {
+        $Token = $clip
+        Write-Host '  已从剪贴板取到令牌（不回显）' -ForegroundColor DarkGray
+    } else {
+        Write-Host '  [!] 剪贴板内容不像 Gitee 令牌（应为 20-64 位字母数字）' -ForegroundColor Yellow
+    }
+}
 if (-not $Token) {
     throw '  [X] 缺少令牌：$env:GITEE_TOKEN = "xxxx" 或 -Token xxxx（Gitee → 设置 → 私人令牌）'
 }
