@@ -69,17 +69,67 @@ python tools\assets.py fetch fstab.qcom
 
 ## 3. CI
 
+### 3.1 为什么这里不像 GitHub Actions
+
+Gitee 没有 Actions 这套东西，`Gitee Go` 是另一个产品，差异是结构性的：
+
+| GitHub Actions | Gitee 侧 | 后果 |
+| --- | --- | --- |
+| `.github/workflows/*.yml` 自动生效 | 只认 `.workflow/*.yml`，还要在网页「服务 → Gitee Go」里开通并绑定 | 目录得另放一份，不能指着 `.github/` |
+| `on: workflow_dispatch` + `inputs` | **没有**等价物；只有网页上的「运行」按钮 | 「带参数手动跑」要靠脚本，不是点面板 |
+| `secrets.GITHUB_TOKEN` 自动注入 | 没有内置令牌；要自己建私人令牌，塞进流水线环境变量 | 发布这一步得显式给 `GITEE_TOKEN` |
+| `actions/checkout`、`actions/cache` 等 marketplace | 只有平台内置的一批步骤插件，字段名随版本变 | 缓存/分卷这类事自己写脚本更稳 |
+| Runner 可选 `windows-latest` | Gitee Go 的 runner 是 Linux | `lpmake/7z/flashtools` 这套 Windows 工具链跑不了 |
+| `gh release create` | 没有 `gh`；用 OpenAPI（本仓库 `tools/gitee_release.py`） | 发布改成脚本调用 |
+
+所以本仓库的分工是：**能上 Gitee Go 的只有轻量校验，真正的出包与发版在 Windows 上手动/脚本跑**。
+这不是退步，是把「Actions 能做的事」换成了「一条命令 + 参数」，反而更好控制。
+
+### 3.2 手动运行（等价于 Actions 的 Run workflow）
+
+```powershell
+cd F:\DeepSeek\XMAPort-SHALLOW
+powershell -File ci\release.ps1          # 打开菜单，按 1 就全流程 + 发版
+```
+
+菜单项：
+
+```
+[1] 全流程 + 发版    自检 → 拉资源 → 移植/精简/打包 → 分卷 → 建 Release
+[2] 只打包 + 发版    用现有工作区出 zip（跳过 1-5）
+[3] 只自检           工具链/模块/配置/镜像链
+[4] 列出现有 Release tag 与附件
+[5] 往已有 tag 补附件
+[6] 下载仓库归档 zip
+```
+
+不想交互、要写进计划任务或别的 CI，就直接带参数：
+
+```powershell
+$env:GITEE_TOKEN = "xxxx"                        # 只有发布类动作需要
+powershell -File ci\release.ps1 -Action full -Publish
+powershell -File ci\release.ps1 -Action pack -Publish -Tag sh-20261110
+powershell -File ci\release.ps1 -Action selftest
+powershell -File ci\release.ps1 -Action list
+powershell -File ci\release.ps1 -Action upload -Tag sh-20261110 -Files release\*.7z.001
+```
+
+等价于 GitHub 上那套 `Run workflow` + 三个 inputs（`device / stage / offline`），
+只是参数从网页面板换成了命令行。
+
+### 3.3 三种入口的分工
+
 | 场景 | 入口 | 跑什么 |
 | --- | --- | --- |
+| 手动发一版 | `ci/release.ps1` | 菜单 / 参数，一路到 Release |
+| 只要产物不要发布 | `ci/run_pipeline.ps1 -Stage all` | 自检 → 拉资源 → 三阶段 → 分卷，产物留 `release\` |
 | Gitee Go（Linux runner） | `ci/gitee-go.yml` | `compileall` → `--selftest` → 离线单测 → `assets.py mirrors` → 源码包 |
-| 本地 / 自建 Windows runner | `ci/run_pipeline.ps1` | 自检 → 拉资源 → 移植/精简/打包 → 7z 分卷 → 可选发布 |
 | 历史 GitHub Actions | `.github/workflows/build.yml` | 同上，仅在 GitHub 侧生效 |
 
 启用 Gitee Go：仓库 → 服务 → Gitee Go → 新建流水线 → 选「仓库内 YAML」→
 把 `ci/gitee-go.yml` 拷成 `.workflow/build.yml`（插件参数字段以网页端步骤面板为准）。
+这条流水线**只做校验**，别指望它出 7.75 GiB 的 super。
 
-**Gitee Go 跑不了 ROM 全流程**：runner 是 Linux、没有 40 GB 空闲盘，也没有
-Windows 版 `lpmake / 7z / flashtools` 的落盘路径——这是设计上的分工，不是缺陷。
 
 ```powershell
 powershell -File ci\run_pipeline.ps1 -Stage all

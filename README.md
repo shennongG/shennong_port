@@ -291,24 +291,27 @@ flash_recovery=true
 
 ## 5. 在 Gitee 上跑（CI / 发布）
 
+Gitee 没有 GitHub Actions：`.github/workflows` 不生效，`workflow_dispatch` 那套带参数的
+「Run workflow」面板也不存在。对应关系与替代方案见
+[docs/GITEE.md §3](docs/GITEE.md#3-ci)。
+
 | 场景 | 入口 | 说明 |
 | --- | --- | --- |
+| **手动发一版** | `ci/release.ps1` | 交互菜单：全流程/只打包/自检/列 Release/补附件/下归档 |
 | 建仓 + 推送 | `ci/push_to_gitee.ps1` | API 建仓 → 配远端 → 推送 → 校验，只需 `GITEE_TOKEN` |
-| 本地 / 自建 Windows runner | `ci/run_pipeline.ps1` | 自检 → 拉资源 → 三阶段 → 分卷 → 可选发布 |
+| 只要产物不发布 | `ci/run_pipeline.ps1` | 自检 → 拉资源 → 三阶段 → 分卷，产物留 `release\` |
 | Gitee Go（Linux runner） | `ci/gitee-go.yml` | 语法编译 + `--selftest` + 离线单测 + 源码包 |
-| 发布产物到 Release | `tools/gitee_release.py` | 替代手工建 Release，只依赖 `GITEE_TOKEN` |
-| 仓库对象管理 | `tools/gitee_repo.py` | `info / create / ensure` |
+| 发布产物到 Release | `tools/gitee_release.py` | 替代 `gh release create`，只依赖 `GITEE_TOKEN` |
 
 ```powershell
-# 0) 建仓 + 推送（令牌勾 projects 权限即可）
+# 手动发版：菜单式，按提示选（等价于 Actions 的 Run workflow）
 $env:GITEE_TOKEN = "你的 Gitee 私人令牌"
-powershell -File ci\push_to_gitee.ps1 -UseClipboard
+powershell -File ci\release.ps1
 
-# 1) 全流程
-powershell -File ci\run_pipeline.ps1 -Stage all
-
-# 2) 已有工作区，只打包 + 发布
-powershell -File ci\run_pipeline.ps1 -Stage pack -Publish -Tag sh-20261110-1530
+# 非交互（计划任务 / 别的 CI）
+powershell -File ci\release.ps1 -Action full -Publish
+powershell -File ci\release.ps1 -Action pack -Publish -Tag sh-20261110
+powershell -File ci\release.ps1 -Action list
 ```
 
 > 脚本存成 UTF-8 with BOM，Windows 自带的 PowerShell 5.1 与 PowerShell 7 都能跑。
@@ -339,6 +342,7 @@ shennong-port/
 │  ├─ recovery_bin/7zzs       Recovery 侧解压器
 │  └─ flashtools.zip          卡刷包里的刷机脚本
 ├─ ci/
+│  ├─ release.ps1             手动发版台（菜单 / 参数，等价 Actions 的 Run workflow）
 │  ├─ push_to_gitee.ps1       建仓 + 推送
 │  ├─ run_pipeline.ps1        Windows 全流程脚本
 │  └─ gitee-go.yml            Gitee Go 流水线模板
