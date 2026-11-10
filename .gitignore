@@ -1,21 +1,29 @@
-# ---- build / test artifacts ----
+# ---- 构建 / 测试产物 ----
 workspace/
 assets/shennong_files/
 __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+.tmp/
 
-# ---- local outputs ----
+# ---- 本地输出 ----
 *.zip
 !tools/flashtools.zip
+!XMAPort-SHALLOW-src.zip
 *.img
 !assets/root_images/*.img
 *.zst
 !assets/root_images/*.zst
 *.log
+*.part
 
-# ---- editors / OS ----
+# ---- 发布产物（分卷 / 归档 / notes）----
+release/
+*.7z
+*.7z.*
+
+# ---- 编辑器 / 系统 ----
 .vscode/
 .idea/
 Thumbs.db

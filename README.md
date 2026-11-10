@@ -1,6 +1,15 @@
-# ShennongPort
+# XMAPort-SHALLOW
+
+[![star](https://gitee.com/h-shennong/XMAPort-SHALLOW/badge/star.svg?theme=dark)](https://gitee.com/h-shennong/XMAPort-SHALLOW/stargazers)
+[![fork](https://gitee.com/h-shennong/XMAPort-SHALLOW/badge/fork.svg?theme=dark)](https://gitee.com/h-shennong/XMAPort-SHALLOW/members)
+![](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4)
+![](https://img.shields.io/badge/python-3.8%2B-3776ab)
 
 **小米 18 Pro Max（madrid）→ 小米 14 Pro（shennong）移植流水线：移植 → 精简 → 打包。**
+
+> 本仓库托管在 **Gitee**（`https://gitee.com/h-shennong/XMAPort-SHALLOW`），
+> 由 GitHub 上的 `long969697262/shennong_port`（现名 `XMAPort-SHALLOW`）迁移而来，
+> 迁移改动与原因见 [docs/GITEE.md](docs/GITEE.md)。
 
 把两个只管一段路的项目合并成一条能跑完的流水线：
 
@@ -31,12 +40,13 @@
 
 ```bat
 :: 0) 环境：Python 3.8+（建议 3.12），约 40 GB 磁盘
-cd /d <本项目目录>
+git clone https://gitee.com/h-shennong/XMAPort-SHALLOW.git
+cd XMAPort-SHALLOW
 
-:: 1) 自检：工具链 / 模块 / 配置，应该全 [OK]
+:: 1) 自检：工具链 / 模块 / 配置 / 资源镜像链，应该全 [OK]
 python XMAPort.py --selftest
 
-:: 2) 拉取 14 Pro 专属资源（约 310 MiB，只需一次）
+:: 2) 拉取 14 Pro 专属资源（约 310 MiB，只需一次；自动挑可用镜像）
 python tools\assets.py fetch
 
 :: 3) 检查目标配置
@@ -45,6 +55,15 @@ notepad config.ini        :: device_platform / device_size / 两个 ROM 直链
 :: 4) 全流程：移植 → 精简 → 打包
 python XMAPort.py --auto --device shennong
 ```
+
+> 国内网络先看一眼镜像链，哪条通心里有数：
+>
+> ```bat
+> python tools\assets.py mirrors --probe
+> ```
+>
+> 默认顺序 = **Gitee 镜像 → ghfast.top → gh-proxy.com → ghproxy.net → GitHub raw**，
+> 前一条失败自动换下一条；也可以只钉一条，见 [§3.3](#33-资源下载gitee-镜像链)。
 
 > Step 3 默认只解源包的 `system,system_ext,product`（省几 GB、也快很多），
 > 目标包解全量（固件镜像要进卡刷包）；payload 超时 60 分钟、并发 8，
@@ -158,23 +177,45 @@ python XMAPort.py --auto --device shennong --stage pack   :: 只打包 + 出 zip
 | `fstab` | 替换 `vendor/etc/fstab.qcom` | `fstab.qcom` |
 | `firmware` | 内置 TWRP 到 `firmware-update` | `recovery.zip` |
 | `signature`（可选） | 移除 APK 签名校验（apktool） | — |
-| `icons`（可选） | 完美图标重打包 | 联网 |
+| `icons`（可选） | 完美图标重打包 | 联网（同样走镜像链） |
 | `kernelsu`（可选） | init_boot 注入 KernelSU | 仅 Linux |
 
 **vendor 会被重新打包**：14 Pro 的 vendor 要改 fstab/属性/init，所以 `repack_vendor=true`
 时会先 `extract_img.py` 解包 `vendor.img`，修补后用 `pack_partitions.py` 重新生成。
 
-### 3.3 资源下载
+### 3.3 资源下载（Gitee 镜像链）
 
 `tools/assets.py` 按清单从上游仓库拉取 `shennong_files/`，断点续传 + 大小校验，
-缓存到 `assets/shennong_files/`。国内网络可换镜像：
+缓存到 `assets/shennong_files/`。**不再是单点 GitHub raw**，而是按顺序尝试一条镜像链：
+
+```
+1. https://gitee.com/h-shennong/14PRO_SHALLOW_ROM/raw/main/shennong_files/   ← Gitee 镜像
+2. https://ghfast.top/https://raw.githubusercontent.com/XHR222/14PRO_SHALLOW_ROM/main/shennong_files/
+3. https://gh-proxy.com/https://raw.githubusercontent.com/XHR222/14PRO_SHALLOW_ROM/main/shennong_files/
+4. https://ghproxy.net/https://raw.githubusercontent.com/XHR222/14PRO_SHALLOW_ROM/main/shennong_files/
+5. https://raw.githubusercontent.com/XHR222/14PRO_SHALLOW_ROM/main/shennong_files/
+```
+
+查看 / 探测：
+
+```bat
+python tools\assets.py mirrors            :: 只打印顺序
+python tools\assets.py mirrors --probe    :: 逐个探测可用性
+```
+
+想钉死一条（比如国内只用 Gitee 镜像，其它全关）：
 
 ```ini
 [shennong]
-asset_base=https://ghfast.top/https://raw.githubusercontent.com/XHR222/14PRO_SHALLOW_ROM/main/shennong_files/
+asset_base=https://gitee.com/h-shennong/14PRO_SHALLOW_ROM/raw/main/shennong_files/
+;; 或者只加几个前缀到链首，仍保留回落
+asset_mirrors=https://ghfast.top/,https://gh-proxy.com/
 ```
 
-或环境变量 `SHENNONG_ASSET_BASE`。仓库本身不携带这 310 MiB 二进制。
+也支持环境变量 `SHENNONG_ASSET_BASE` / `SHENNONG_ASSET_MIRRORS`，CI 里更好用。
+**Gitee 镜像仓库怎么来**：Gitee → 新建仓库 → 「导入已有仓库」→ 填
+`https://github.com/XHR222/14PRO_SHALLOW_ROM` → 创建，之后第 1 条就通了（实测最快、
+不受代理限速）。仓库本身不携带这 310 MiB 二进制。
 
 ---
 
@@ -250,47 +291,93 @@ flash_recovery=true
 
 ---
 
-## 5. 目录结构
+## 5. 在 Gitee 上跑（CI / 发布）
+
+Gitee 不认 `.github/workflows/`，所以流水线做成了两条腿，**同一套命令**：
+
+| 场景 | 入口 | 说明 |
+| --- | --- | --- |
+| 迁移到 Gitee（建仓+推送） | `ci/push_to_gitee.ps1` | 一条命令：API 建仓 → 配远端 → 推送 → 校验，只需 `GITEE_TOKEN` |
+| 本地 / 自建 Windows runner | `ci/run_pipeline.ps1` | 一条命令跑完：自检 → 拉资源 → 移植/精简/打包 → 分卷 → 可选发布 |
+| Gitee Go（Linux runner） | `ci/gitee-go.yml` | 轻量校验：语法编译 + `--selftest` + 离线单测 + 源码包；ROM 全流程跑不动（无 Windows / 无 40 GB 盘） |
+| 发布产物到 Release | `tools/gitee_release.py` | 替代 `gh release create`，只依赖 `GITEE_TOKEN` |
+| 仓库对象管理 | `tools/gitee_repo.py` | `info / create / ensure`，给推送脚本用 |
+| 历史 GitHub Actions | `.github/workflows/build.yml` | 原样保留（GitHub 镜像仍可用），Gitee 侧不生效 |
+
+```powershell
+# 0) 迁移：建仓 + 推送（只需要一个私人令牌，勾 projects 权限）
+$env:GITEE_TOKEN = "你的 Gitee 私人令牌"
+pwsh -File ci\push_to_gitee.ps1
+
+# 1) 全流程
+pwsh -File ci\run_pipeline.ps1 -Stage all
+
+# 2) 已有工作区，只打包 + 发布
+pwsh -File ci\run_pipeline.ps1 -Stage pack -Publish -Tag sh-20261110-1530
+```
+
+令牌只需勾 `projects` 权限；也可以直接调发布器：
+
+```bat
+python tools\gitee_release.py list
+python tools\gitee_release.py create --tag sh-20261110 --title "XMAPort-SHALLOW 1110" ^
+    --notes-file release\notes.md release\*.7z.001
+```
+
+启用 Gitee Go：仓库 → 服务 → Gitee Go → 新建流水线 → 选「仓库内 YAML」，
+把 `ci/gitee-go.yml` 拷成 `.workflow/build.yml`（插件参数以网页端步骤面板为准）。
+
+---
+
+## 6. 目录结构
 
 ```
-shennong_port/
+XMAPort-SHALLOW/
 ├─ XMAPort.py                 入口：Step 1-8 编排 + CLI + 自检
-├─ config.ini                 合并配置（移植/精简/打包三段）
+├─ config.ini                 合并配置（移植/精简/打包三段 + 资源镜像）
 ├─ tools/
 │  ├─ make_hyper.py           移植核心（上游）
 │  ├─ pack_partitions.py      erofs/ext4 打包（上游）
 │  ├─ extract_img.py          镜像解包（上游）
 │  ├─ slim.py                 14 Pro 应用清单 + 通用档位
 │  ├─ shennong_patch.py       make.sh 的功能修补移植
-│  ├─ assets.py               shennong_files 下载/校验
+│  ├─ assets.py               shennong_files 下载 / 校验 / 镜像链
+│  ├─ gitee_release.py        Gitee Release 发布（替代 gh CLI）
+│  ├─ gitee_repo.py           Gitee 建仓 / 查仓（OpenAPI）
 │  ├─ stage_common.py         路径/配置/体积公共设施
 │  ├─ device_profiles.py      shennong / madrid 档案（预算上限）
 │  ├─ package_zip.py          super.zst + 卡刷包
 │  ├─ apktool.jar / jre/      services.jar 签名补丁用
 │  ├─ 7z / aria2c / lpmake / mkfs.erofs / zstd …
 │  └─ flashtools.zip          卡刷包里的刷机脚本
+├─ ci/
+│  ├─ push_to_gitee.ps1       建仓 + 推送（迁移落地用）
+│  ├─ run_pipeline.ps1        Windows 全流程脚本（本地 / runner 通用）
+│  └─ gitee-go.yml            Gitee Go 流水线模板（轻量校验 + 源码包）
 ├─ tests/
 │  ├─ test_stages.py          无 ROM 回归测试（合成数据）
 │  └─ make_fixture.py         生成合成工作区，便于手动跑 slim/pack
 ├─ docs/
+│  ├─ GITEE.md                Gitee 迁移说明（改了什么、为什么、还有什么要注意）
 │  ├─ PORT_18PROMAX_TO_14PRO.md  18 Pro Max → 14 Pro 专项说明（预算/版本/刷写）
 │  ├─ ARCHITECTURE.md         流水线设计 / 数据流 / 分区来源
 │  ├─ USAGE.md                详细用法 + 排错
 │  ├─ MIGRATION.md            make.sh 每一段 → Python 的对照表
 │  └─ LIMITS.md               没移植过来的部分与原因
-└─ .github/workflows/build.yml  Windows CI：自检 → 拉资源 → 三阶段 → 发布
+└─ .github/workflows/build.yml  Windows CI（GitHub 侧保留）：自检 → 拉资源 → 三阶段 → 发布
 ```
 
 ---
 
-## 6. 与上游的差异 / 已知限制
+## 7. 与上游的差异 / 已知限制
 
 * **没有搬运的部分**：`vendor_boot` 里 `first_stage_ramdisk/fstab.qcom` 的替换
   （依赖 Linux 版 magiskboot + cpio）、KernelSU 注入（ksud 仅 Linux）、
   S3 上传（私有仓库密钥）。`tools/shennong_patch.py` 会明确 `skip`，不会假装成功。
 * **签名校验移除**是可选步骤（`enable_signature=true`），走 apktool + 内置 JRE；
   失败只记为 `fail`，不中断打包。
-* **完美图标**是可选步骤（`enable_icons=true`），需要联网拉 Perfect-Icons 项目。
+* **完美图标**是可选步骤（`enable_icons=true`），需要联网拉 Perfect-Icons 项目
+  （镜像链：Gitee 镜像 → codeload → 加速前缀）。
 * **版本跨度**：18 Pro Max 是 Android 17，14 Pro 底包是 Android 16。`sync_apex`
   会把底包 VNDK 同步进移植包，但框架/HAL 差得太远时仍可能卡开机；首选更早的
   madrid OS4 包或更新的 shennong 底包，详见
@@ -306,7 +393,7 @@ shennong_port/
 
 ---
 
-## 7. 测试
+## 8. 测试
 
 ```bat
 python tests\test_stages.py        :: 精简/修补单元回归（合成数据 + 假资源）
@@ -320,12 +407,13 @@ python XMAPort.py --auto --stage pack --device shennong
 和 vendor 侧修补；`make_fixture.py` 用来手动验证「精简 → 打包 → 出 zip」全链路，
 包括 split_ab 的 lpmake 参数与 auto-fit 重打包。
 
-CI（`.github/workflows/build.yml`）在 Windows runner 上会先跑 `--selftest`，
-再按 `stage` 拉资源并执行全流程，最后分卷上传 Release。
+CI：Gitee 侧用 `ci/gitee-go.yml`（Linux，只跑语法/自检/单测/源码包）；
+Windows 全流程用 `ci/run_pipeline.ps1`，会先跑 `--selftest`，再按 `stage`
+拉资源并执行全流程，最后分卷上传 Gitee Release。
 
 ---
 
-## 8. 免责声明 (Disclaimer)
+## 9. 免责声明 (Disclaimer)
 
 * 版权与使用限制：本项目仅供个人学习与测试使用。ROM 版权归小米公司所有，请于下载后 24 小时内删除。
 
@@ -342,12 +430,12 @@ CI（`.github/workflows/build.yml`）在 Windows runner 上会先跑 `--selftest
 * 测试状态：该项目尚未经过实机测试。
 
 * 严禁商用：本项目严禁用于任何商业用途或售卖盈利。
-  
+
 * 如有侵权，联系本人删除。
 
+---
 
-
-## 9. 致谢
+## 10. 致谢
 
 * [XMAPort](https://github.com/NorthStarK-Lvy/XMAPort)（MIT）：移植引擎、打包器、工具链。
 * [14PRO_SHALLOW_ROM](https://github.com/XHR222/14PRO_SHALLOW_ROM)：14 Pro 精简清单、修补资源与刷机脚本。

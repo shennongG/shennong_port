@@ -45,7 +45,7 @@ def init_console(auto=False):
     os.system("")
     # 设置控制台窗口标题（auto 模式下跳过）
     if not auto:
-        os.system("title ShennongPort - port / slim / pack")
+        os.system("title XMAPort-SHALLOW - port / slim / pack")
     # 防止非 UTF-8 终端下中文输出崩溃
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -1812,7 +1812,7 @@ def one_click_port(auto=False, stage="all", offline=False):
     log_write("Target Device: {}".format(TARGET_DEVICE))
     print()
     print("  {}{}============================================================{}".format(C, BD, N))
-    print("  {}{}  ShennongPort: port -> slim -> pack{}".format(C, BD, N))
+    print("  {}{}  XMAPort-SHALLOW (ShennongPort): port -> slim -> pack{}".format(C, BD, N))
     print("  {}{}============================================================{}".format(C, BD, N))
     print()
     print("  {}  Workflow:{}".format(W, N))
@@ -2184,7 +2184,7 @@ def show_menu():
 # ---------------- CLI 参数解析 ----------------
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="ShennongPort - HyperOS 移植 → 精简 → 打包 (XMAPort + 14PRO_SHALLOW_ROM)",
+        description="XMAPort-SHALLOW - HyperOS 移植 → 精简 → 打包 (XMAPort + 14PRO_SHALLOW_ROM)",
     )
     parser.add_argument("--auto", action="store_true",
                         help="Non-interactive mode for CI/GitHub Actions")
@@ -2232,7 +2232,7 @@ def selftest():
         pass
     ok = True
     print()
-    print("  ========== ShennongPort self-test ==========")
+    print("  ========== XMAPort-SHALLOW self-test (Gitee edition) ==========")
     print("  Python: {}  ({})".format(sys.version.split()[0], sys.executable))
     print()
     checks = [
@@ -2314,6 +2314,11 @@ def selftest():
             n, total = 0, 13
         print("  shennong_files  = {}/{} 已缓存 ({})".format(
             n, total, scommon.SHENNONG_ASSETS))
+        try:
+            chain = [asset_mod.short_base(b) for b in asset_mod.base_urls(cfg_map)]
+            print("  asset mirrors   = {}".format(" -> ".join(chain)))
+        except Exception:
+            pass
     print()
     print("  {}".format("自检通过" if ok else "自检失败：缺少必需文件"))
     return 0 if ok else 1
@@ -2343,7 +2348,7 @@ def main():
         d.mkdir(parents=True, exist_ok=True)
 
     if args.auto:
-        log_write("========== ShennongPort Auto Mode Start ==========")
+        log_write("========== XMAPort-SHALLOW Auto Mode Start ==========")
         try:
             result = one_click_port(auto=True, stage=args.stage, offline=args.offline)
         except ReturnToMenu:

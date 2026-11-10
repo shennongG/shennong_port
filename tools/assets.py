@@ -8,16 +8,24 @@ displayconfig、fstab、TWRP 等），它们在上游仓库里合计约 310 MiB�
 
     assets/shennong_files/
 
-下载源默认是上游仓库的 raw 地址，可用 config.ini 或环境变量换成镜像：
+下载源是「镜像链」：按顺序尝试，前一个失败（超时/404/截断）自动换下一个，
+任一成功即写盘。顺序 = 显式配置 > 环境变量 > 内置镜像链（Gitee 镜像 →
+公益加速前缀 → GitHub 直连）：
 
-    [shennong] asset_base=https://ghfast.top/https://raw.githubusercontent.com/...
-    SHENNONG_ASSET_BASE=...
+    [shennong]
+    ; 一条完整 base，指定后只走它（会排在链首，失败仍会回落）
+    asset_base=https://gitee.com/h-shennong/14PRO_SHALLOW_ROM/raw/main/shennong_files/
+    ; 或若干加速前缀 / 完整 base，逗号分隔，按序压到链首
+    asset_mirrors=https://ghfast.top/,https://gh-proxy.com/
+
+    SHENNONG_ASSET_BASE=...      SHENNONG_ASSET_MIRRORS=...
 
 用法：
-    python tools/assets.py list
-    python tools/assets.py fetch            # 补齐缺失
+    python tools/assets.py list      # 资源 + 缓存状态 + 镜像链
+    python tools/assets.py fetch     # 补齐缺失（自动选可用镜像）
     python tools/assets.py fetch fstab.qcom MSA.apk
     python tools/assets.py verify
+    python tools/assets.py mirrors   # 只打印镜像链和连通性
 """
 
 import argparse
@@ -32,8 +40,89 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import stage_common as sc  # noqa: E402
 
-UPSTREAM_BASE = ("https://raw.githubusercontent.com/XHR222/"
-                 "14PRO_SHALLOW_ROM/main/shennong_files/")
+# --------------------------------------------------------------- 上游 / 镜像常量
+RAW_BASE = ("https://raw.githubusercontent.com/XHR222/"
+            "14PRO_SHALLOW_ROM/main/shennong_files/")
+
+# Gitee 镜像：在 Gitee「新建仓库 → 导入已有仓库」把 XHR222/14PRO_SHALLOW_ROM
+# 导一份到本账号下，国内下载就走这条（不限速、不吃代理）。
+GITEE_OWNER = "h-shennong"
+GITEE_MIRROR_REPO = "14PRO_SHALLOW_ROM"
+GITEE_BASE = "https://gitee.com/{owner}/{repo}/raw/main/shennong_files/".format(
+    owner=GITEE_OWNER, repo=GITEE_MIRROR_REPO)
+
+# 公益加速前缀：前缀 + 完整 raw 地址
+PROXY_PREFIXES = (
+    "https://ghfast.top/",
+    "https://gh-proxy.com/",
+    "https://ghproxy.net/",
+)
+
+# 完美图标（可选步骤 icons 用）：同样的镜像思路
+ICON_REPO = "pzcn/Perfect-Icons-Completion-Project"
+ICON_BRANCH = "main"
+
+
+def default_bases():
+    """内置镜像链：Gitee 镜像 → 加速前缀 → GitHub 直连。"""
+    bases = [GITEE_BASE]
+    bases += [p + RAW_BASE for p in PROXY_PREFIXES]
+    bases.append(RAW_BASE)
+    return bases
+
+
+def _split_list(raw):
+    return [x.strip() for x in str(raw or "").replace(";", ",").split(",") if x.strip()]
+
+
+def _expand(entry):
+    """把一条配置展开成完整 base：含 shennong_files/ 视为完整地址，否则当加速前缀。"""
+    e = str(entry or "").strip()
+    if not e:
+        return ""
+    if not e.endswith("/"):
+        e += "/"
+    if "shennong_files/" in e:
+        return e
+    return e + RAW_BASE
+
+
+def base_urls(cfg=None):
+    """按优先级返回下载源列表（去重、保序）。"""
+    cfg = cfg or sc.read_ini()
+    sec = cfg.get("sections", {}).get("shennong", {})
+    explicit = []
+    explicit += _split_list(sec.get("asset_base", ""))
+    explicit += _split_list(os.environ.get("SHENNONG_ASSET_BASE", ""))
+    explicit += _split_list(sec.get("asset_mirrors", ""))
+    explicit += _split_list(os.environ.get("SHENNONG_ASSET_MIRRORS", ""))
+    out = []
+    for e in explicit:
+        u = _expand(e)
+        if u and u not in out:
+            out.append(u)
+    for u in default_bases():
+        if u not in out:
+            out.append(u)
+    return out
+
+
+def base_url(cfg=None):
+    """兼容旧接口：返回第一优先的下载源。"""
+    return base_urls(cfg)[0]
+
+
+def short_base(base):
+    """给日志用的短名字，避免一屏 URL。"""
+    if base.startswith(GITEE_BASE):
+        return "gitee:" + GITEE_MIRROR_REPO
+    for p in PROXY_PREFIXES:
+        if base.startswith(p):
+            return p.strip("/").split("//")[-1]
+    if "raw.githubusercontent.com" in base:
+        return "github-raw"
+    return base
+
 
 # name -> (size, 用途)
 ASSETS = {
@@ -77,14 +166,6 @@ def asset_dir(cfg=None):
     return d
 
 
-def base_url(cfg=None):
-    cfg = cfg or sc.read_ini()
-    custom = cfg.get("sections", {}).get("shennong", {}).get("asset_base", "").strip()
-    if not custom:
-        custom = os.environ.get("SHENNONG_ASSET_BASE", "").strip()
-    return (custom or UPSTREAM_BASE).rstrip("/") + "/"
-
-
 def local_path(name, cfg=None):
     return asset_dir(cfg) / name
 
@@ -101,12 +182,8 @@ def missing(names, cfg=None):
     return [n for n in names if not have(n, cfg)]
 
 
-def _download_one(name, cfg=None, quiet=False):
-    size, _use = ASSETS[name]
-    dest = local_path(name, cfg)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    part = dest.with_name(dest.name + ".part")
-    url = base_url(cfg) + urllib.request.quote(name)
+def _fetch_one(url, part, size, name, quiet=False, retries=1):
+    """从单个 URL 拉到 part（支持断点续传）。返回 (ok, 错误描述)。"""
     offset = part.stat().st_size if part.exists() else 0
     if offset > size:
         try:
@@ -114,49 +191,73 @@ def _download_one(name, cfg=None, quiet=False):
         except OSError:
             pass
         offset = 0
-    req = urllib.request.Request(url, headers={"User-Agent": "shennong-port-assets"})
+    if offset == size and size:
+        return True, ""
+    headers = {"User-Agent": "xmaport-shallow/1.0 (gitee)"}
     if offset:
-        req.add_header("Range", "bytes={}-".format(offset))
-    try:
-        with urllib.request.urlopen(req, timeout=180) as resp:
-            if offset and resp.status != 206:
-                offset = 0
-            mode = "ab" if offset else "wb"
-            got = offset
-            last = 0.0
-            with open(part, mode) as f:
-                while True:
-                    chunk = resp.read(1 << 20)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    got += len(chunk)
-                    now = time.time()
-                    if not quiet and now - last > 0.5:
-                        last = now
-                        pct = got * 100.0 / max(size, 1)
-                        sys.stdout.write("\r    {:>6.1f}%  {:>10} / {:<10}  {}".format(
-                            pct, sc.human(got), sc.human(size), name))
-                        sys.stdout.flush()
-    except urllib.error.HTTPError as e:
-        if not quiet:
-            print("\n    [X] {} HTTP {}: {}".format(name, e.code, url))
-        return False
-    except Exception as e:
-        if not quiet:
-            print("\n    [X] {} 下载失败: {}".format(name, e))
-        return False
+        headers["Range"] = "bytes={}-".format(offset)
+    last = ""
+    for attempt in range(retries + 1):
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                if offset and getattr(resp, "status", 200) != 206:
+                    offset = 0
+                mode = "ab" if offset else "wb"
+                got = offset
+                last_draw = 0.0
+                with open(part, mode) as f:
+                    while True:
+                        chunk = resp.read(1 << 20)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        got += len(chunk)
+                        now = time.time()
+                        if not quiet and now - last_draw > 0.5:
+                            last_draw = now
+                            pct = got * 100.0 / max(size, 1)
+                            sys.stdout.write("\r    {:>6.1f}%  {:>10} / {:<10}  {}".format(
+                                pct, sc.human(got), sc.human(size), name))
+                            sys.stdout.flush()
+            if part.stat().st_size == size:
+                return True, ""
+            last = "大小不符 {} != {}".format(part.stat().st_size, size)
+        except urllib.error.HTTPError as e:
+            last = "HTTP {}".format(e.code)
+            if e.code in (404, 403, 410):
+                break
+        except Exception as e:                      # noqa: BLE001 - 网络异常种类多
+            last = "{}".format(e)
+        # 下一轮：重新读取 part 大小决定续传位置
+        offset = part.stat().st_size if part.exists() else 0
+        if offset >= size and size:
+            return True, ""
+    return False, last
 
-    if part.stat().st_size != size:
-        if not quiet:
-            print("\n    [X] {} 大小不符: {} != {}".format(
-                name, part.stat().st_size, size))
-        return False
-    os.replace(part, dest)
+
+def _download_one(name, cfg=None, quiet=False):
+    size, _use = ASSETS[name]
+    dest = local_path(name, cfg)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    part = dest.with_name(dest.name + ".part")
+    errors = []
+    for base in base_urls(cfg):
+        url = base + urllib.request.quote(name)
+        ok, why = _fetch_one(url, part, size, name, quiet=quiet)
+        if ok:
+            os.replace(part, dest)
+            if not quiet:
+                sys.stdout.write("\r    [OK] {:>10}  {:<24} <- {}\n".format(
+                    sc.human(size), name, short_base(base)))
+                sys.stdout.flush()
+            return True
+        errors.append("{}: {}".format(short_base(base), why))
     if not quiet:
-        sys.stdout.write("\r    [OK] {:>10}  {}\n".format(sc.human(size), name))
-        sys.stdout.flush()
-    return True
+        print("\n    [X] {} 全部镜像失败".format(name))
+        for line in errors:
+            print("        - {}".format(line))
+    return False
 
 
 def fetch(names=None, cfg=None, quiet=False):
@@ -171,8 +272,8 @@ def fetch(names=None, cfg=None, quiet=False):
     if not quiet:
         total = sum(ASSETS[n][0] for n in need)
         print("  需要下载 {} 个文件，共 {}".format(len(need), sc.human(total)))
-        print("  来源: {}".format(base_url(cfg)))
-        print("  缓存: {}".format(asset_dir(cfg)))
+        print("  镜像链: {}".format(" -> ".join(short_base(b) for b in base_urls(cfg))))
+        print("  缓存:   {}".format(asset_dir(cfg)))
     ok = 0
     for name in need:
         if _download_one(name, cfg, quiet=quiet):
@@ -197,13 +298,103 @@ def ensure_for_steps(steps, cfg=None, offline=False, quiet=False):
     return missing(names, cfg)
 
 
+# ------------------------------------------------------------ 完美图标（icons 步骤）
+def icon_urls(cfg=None):
+    """Perfect-Icons 压缩包的镜像链（codeload / Gitee 镜像 / 加速前缀）。"""
+    cfg = cfg or sc.read_ini()
+    sec = cfg.get("sections", {}).get("shennong", {})
+    explicit = _split_list(sec.get("icons_url", ""))
+    explicit += _split_list(os.environ.get("SHENNONG_ICONS_URL", ""))
+    codeload = "https://codeload.github.com/{repo}/zip/refs/heads/{br}".format(
+        repo=ICON_REPO, br=ICON_BRANCH)
+    gitee_zip = "https://gitee.com/{owner}/{repo}/repository/archive/{br}.zip".format(
+        owner=GITEE_OWNER, repo=ICON_REPO.split("/")[1], br=ICON_BRANCH)
+    out = []
+    for e in explicit:
+        if e and e not in out:
+            out.append(e)
+    for u in (gitee_zip, codeload,
+              "https://ghfast.top/" + codeload,
+              "https://gh-proxy.com/" + codeload):
+        if u not in out:
+            out.append(u)
+    return out
+
+
+def fetch_icons(dest, cfg=None, quiet=False):
+    """下载 Perfect-Icons.zip 到 dest；成功返回 True。"""
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    part = dest.with_name(dest.name + ".part")
+    for url in icon_urls(cfg):
+        try:
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "xmaport-shallow/1.0 (gitee)"})
+            with urllib.request.urlopen(req, timeout=300) as r, open(part, "wb") as f:
+                total = 0
+                while True:
+                    chunk = r.read(1 << 20)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    total += len(chunk)
+            if total > (1 << 20) and zipfile_is_zip(part):
+                os.replace(part, dest)
+                if not quiet:
+                    print("    [OK] Perfect-Icons.zip {} <- {}".format(
+                        sc.human(total), short_base(url.split("/zip/")[0] + "/")))
+                return True
+        except Exception:                            # noqa: BLE001
+            continue
+    if part.exists():
+        try:
+            part.unlink()
+        except OSError:
+            pass
+    return False
+
+
+def zipfile_is_zip(path):
+    """粗校验：zip 本地文件头 PK\\x03\\x04。"""
+    try:
+        with open(path, "rb") as f:
+            return f.read(4)[:2] == b"PK"
+    except OSError:
+        return False
+
+
+# --------------------------------------------------------------------------- 展示
+def print_chain(cfg=None, probe=False):
+    cfg = cfg or sc.read_ini()
+    print()
+    print("  资源目录: {}".format(asset_dir(cfg)))
+    print("  镜像链（按顺序尝试）:")
+    for i, base in enumerate(base_urls(cfg), 1):
+        line = "    {}. {:<12} {}".format(i, short_base(base), base)
+        print(line)
+    if probe:
+        print()
+        print("  连通性（HEAD 探测 overlay.zip 的首个 1 字节）:")
+        for base in base_urls(cfg):
+            url = base + "overlay.zip"
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "xmaport-shallow/1.0 (gitee)", "Range": "bytes=0-0"})
+            try:
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    print("    [OK]   {:<12} HTTP {}".format(
+                        short_base(base), getattr(r, "status", 200)))
+            except urllib.error.HTTPError as e:
+                print("    [{}]   {:<12} HTTP {}".format(
+                    "~" if e.code in (403, 404) else "X", short_base(base), e.code))
+            except Exception as e:                   # noqa: BLE001
+                print("    [X]    {:<12} {}".format(short_base(base), e))
+    print()
+
+
 def cmd_list():
     cfg = sc.read_ini()
     d = asset_dir(cfg)
-    print()
-    print("  资源目录: {}".format(d))
-    print("  下载源:   {}".format(base_url(cfg)))
-    print()
+    print_chain(cfg)
     total = 0
     for name, (size, use) in ASSETS.items():
         p = d / name
@@ -239,12 +430,14 @@ def main():
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
-    ap = argparse.ArgumentParser(description="shennong_files 资源下载器")
+    ap = argparse.ArgumentParser(description="shennong_files 资源下载器（镜像链 + 断点续传）")
     sub = ap.add_subparsers(dest="cmd")
     sub.add_parser("list", help="列出资源与缓存状态")
     p_fetch = sub.add_parser("fetch", help="下载缺失资源")
     p_fetch.add_argument("names", nargs="*", help="只下指定文件（默认全部）")
     sub.add_parser("verify", help="校验大小")
+    p_mirrors = sub.add_parser("mirrors", help="打印镜像链，可选连通性探测")
+    p_mirrors.add_argument("--probe", action="store_true", help="逐个探测可用性")
     args = ap.parse_args()
     if args.cmd == "list":
         return cmd_list()
@@ -259,6 +452,9 @@ def main():
         return 0 if not left else 1
     if args.cmd == "verify":
         return cmd_verify()
+    if args.cmd == "mirrors":
+        print_chain(probe=args.probe)
+        return 0
     ap.print_help()
     return 2
 

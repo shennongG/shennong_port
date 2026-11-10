@@ -1,2 +1,49 @@
-# Auto detect text files and perform LF normalization
+# XMAPort-SHALLOW :: 换行与二进制口径（Gitee 上按 UTF-8 网页编辑、Windows 上按 CRLF 检出）
+#
+# 1) 文本统一以 LF 入库，检出时按下面规则还原，避免 Gitee 网页编辑器把整文件标成改动；
+# 2) Windows 脚本（bat/cmd/ps1/reg）必须 CRLF，否则 cmd.exe 解析会出怪问题；
+# 3) 二进制一律 binary，git 不做换行转换、不尝试 diff，push 不会被当成文本损坏。
+
 * text=auto
+
+# ---- Windows 侧必须是 CRLF ----
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+*.reg   text eol=crlf
+*.ini   text eol=crlf
+*.txt   text eol=crlf
+
+# ---- 源码 / 文档 / 配置：LF ----
+*.py    text eol=lf
+*.sh    text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.json  text eol=lf
+*.xml   text eol=lf
+.gitignore      text eol=lf
+.gitattributes  text eol=lf
+
+# ---- 二进制：镜像 / 压缩包 / 可执行文件 ----
+*.img        binary
+*.img.zst    binary
+*.bin        binary
+*.zst        binary
+*.gz         binary
+*.zip        binary
+*.7z         binary
+*.jar        binary
+*.apk        binary
+*.exe        binary
+*.dll        binary
+*.so         binary
+*.dylib      binary
+*.png        binary
+*.jpg        binary
+*.ico        binary
+
+# ---- 大文件：不做 diff（Gitee 单文件 100 MiB 是硬上限，别让 git 生成文本补丁）----
+*.zst    -diff
+*.img    -diff
+*.jar    -diff

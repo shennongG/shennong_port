@@ -615,15 +615,9 @@ def step_icons(ctx):
     cache = sc.ASSETS / "Perfect-Icons.zip"
     cache.parent.mkdir(parents=True, exist_ok=True)
     if not cache.is_file():
-        url = ("https://codeload.github.com/pzcn/Perfect-Icons-Completion-Project/"
-               "zip/refs/heads/main")
-        try:
-            import urllib.request
-            req = urllib.request.Request(url, headers={"User-Agent": "shennong-port"})
-            with urllib.request.urlopen(req, timeout=300) as r, open(cache, "wb") as f:
-                shutil.copyfileobj(r, f, 1 << 20)
-        except Exception as e:
-            return "fail", "下载失败: {}".format(e)
+        # 镜像链：codeload → Gitee 镜像 → 公益加速前缀，任一可用即可
+        if not asset_mod.fetch_icons(cache, ctx.cfg, quiet=ctx.quiet):
+            return "fail", "下载失败（全部镜像不可用，可用 config.ini icons_url= 指定源）"
     icons_root = sc.WORKSPACE / "icons_src"
     if icons_root.exists():
         shutil.rmtree(str(icons_root), ignore_errors=True)
