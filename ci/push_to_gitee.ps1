@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     一条命令把本仓库推到 Gitee（建仓 → 配远端 → 推送 → 校验）
 
@@ -119,14 +119,13 @@ if ($AllRefs) {
 
 # ---------------------------------------------------------------- 4. 校验
 Step '5. 校验'
-$ref = & git -c "http.sslBackend=$SslBackend" ls-remote $cleanUrl "refs/heads/$branch" 2>&1
+"  本地 $branch = $((git rev-parse --short $branch).Trim())"
+# 只用 API 校验：私有仓库的 ls-remote 也要凭据，某些沙箱里 git 的子进程还会被拦
+& python tools\gitee_repo.py --token $Token --owner $Owner --repo $Repo info
 if ($LASTEXITCODE -ne 0) {
-    Write-Host '  [!] ls-remote 需要凭据（私有仓库正常现象），以网页为准' -ForegroundColor Yellow
-} else {
-    "  远端 $branch = $ref"
+    Write-Host '  [!] API 校验没通过（令牌是否缺 projects 权限？），以网页为准' -ForegroundColor Yellow
 }
-"  本地 $branch = $(git rev-parse $branch)"
 
 Write-Host ''
 Write-Host "  完成：https://gitee.com/$slug" -ForegroundColor Green
-Write-Host '  后续推送记得让凭据管理器记住：git config --global credential.helper manager' -ForegroundColor DarkGray
+if ($Public) { Write-Host '  公开仓库可直接浏览；若显示待审核，去仓库设置里补实名信息' -ForegroundColor DarkGray }

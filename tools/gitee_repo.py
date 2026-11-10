@@ -110,6 +110,16 @@ def main(argv=None):
                 args.owner, args.repo, info.get("private"),
                 info.get("default_branch"), info.get("size")))
             print("  {}".format(info.get("html_url", "")))
+            branch = info.get("default_branch") or "main"
+            try:
+                head = call("GET", "/repos/{}/{}/branches/{}".format(
+                    args.owner, args.repo, branch), token)
+                sha = (head.get("commit") or {}).get("sha", "")
+                if sha:
+                    print("  远端 {} = {}  {}".format(
+                        branch, sha[:10], (head["commit"]["commit"]["message"] or "").splitlines()[0]))
+            except RuntimeError:
+                pass
             return 0
 
         if args.cmd == "create":

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     XMAPort-SHALLOW 构建流水线（Gitee 版：本地 / 自建 Windows runner / Gitee Go 都能直接跑）
 
