@@ -16,7 +16,7 @@
     目标账号/组织，默认 h-shennong
 
 .PARAMETER Repo
-    目标仓库名，默认 XMAPort-SHALLOW
+    目标仓库名，默认 ShennongPort
 
 .PARAMETER Public
     建公开仓库（默认私有；公开需要账号已实名认证）
@@ -36,7 +36,7 @@
 param(
     [string]$Token = $env:GITEE_TOKEN,
     [string]$Owner = 'h-shennong',
-    [string]$Repo = 'XMAPort-SHALLOW',
+    [string]$Repo = 'shennong-port',
     [switch]$Public,
     [switch]$NoCreate,
     [switch]$AllRefs,

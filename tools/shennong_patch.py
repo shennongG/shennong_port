@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 """精简阶段（二）：14 Pro 功能修补 / shennong patch
 
-把 14PRO_SHALLOW_ROM 的 make.sh 逐段翻译成 Python。make.sh 依赖 bash、sudo、
+把 参考脚本 逐段翻译成 Python。参考脚本 依赖 bash、sudo、
 Linux 版 magiskboot/ksud/zstd，本文件只保留「对分区文件系统」的操作，因此
-Windows / Linux 都能跑，且能被 XMAPort 的移植结果直接复用。
+Windows / Linux 都能跑，且能被 ShennongPort 的移植结果直接复用。
 
-覆盖的 make.sh 段落（步骤 id 对应）：
+覆盖的 参考段落（步骤 id 对应）：
     overlay          product/overlay            ← overlay.zip
     device_features  product/etc/device_features← device_features.zip
     displayconfig    product/etc/displayconfig  ← displayconfig.zip
@@ -169,7 +169,7 @@ def _android_version(url):
 
 
 def _alias(version):
-    """make.sh: s/OS1/V816/g。OS2/3/4 保持原样（14 Pro 底包多为 OS1/OS2/OS3）。"""
+    """版本重写：OS1 -> V816，OS2/3/4 保持原样（14 Pro 底包多为 OS1/OS2/OS3）。"""
     if version.upper().startswith("OS1"):
         return "V816" + version[3:]
     return version
@@ -201,7 +201,7 @@ def _prop_get(path, key):
 
 
 def detect_baselines(ctx):
-    """移植包 / 底包的基线版本号（make.sh 里 ro.system.build.id / ro.vendor.build.id）。"""
+    """移植包 / 底包的基线版本号（参考脚本里 ro.system.build.id / ro.vendor.build.id）。"""
     v = ctx.versions
     v["port_base_line"] = _prop_get(ctx.src("system") / "build.prop", "ro.system.build.id")
     vendor_bp = ctx.tgt("vendor") / "build.prop"
@@ -238,7 +238,7 @@ def _replace_prop_line(text, key, value):
 
 
 def _sub_prop_line(text, key, value):
-    """只替换已存在的 key=...（对齐 make.sh 的 sed 语义，不凭空追加）。"""
+    """只替换已存在的 key=...（对齐 参考脚本的 sed 语义，不凭空追加）。"""
     pat = re.compile(r"^" + re.escape(key) + r"=.*$", re.M)
     if not pat.search(text):
         return text, False
@@ -527,7 +527,7 @@ def step_firmware(ctx):
 
 
 def step_signature(ctx):
-    """移除 Android 签名校验（make.sh 的 services.jar smali 补丁）。"""
+    """移除 Android 签名校验（参考脚本的 services.jar smali 补丁）。"""
     jar = ctx.src("system") / "framework" / "services.jar"
     if not jar.is_file():
         return "skip", "缺少 system/framework/services.jar"
@@ -604,15 +604,15 @@ def _find_java():
 
 
 def step_icons(ctx):
-    """完美图标：把 Perfect-Icons 项目的图标包并入 product/media/theme。"""
+    """完美图标：把 图标工程的图标包并入 product/media/theme。"""
     theme = ctx.src("product") / "media" / "theme"
     if not theme.is_dir():
         return "skip", "缺少 product/media/theme"
     if ctx.offline:
         return "skip", "offline 模式不联网"
-    if not ctx.act("下载 Perfect-Icons 并重建 icons / dynamicicons"):
+    if not ctx.act("下载 图标包 并重建 icons / dynamicicons"):
         return "ok", "[预演]"
-    cache = sc.ASSETS / "Perfect-Icons.zip"
+    cache = sc.ASSETS / "icons-pack.zip"
     cache.parent.mkdir(parents=True, exist_ok=True)
     if not cache.is_file():
         # 镜像链：codeload → Gitee 镜像 → 公益加速前缀，任一可用即可
@@ -623,7 +623,7 @@ def step_icons(ctx):
         shutil.rmtree(str(icons_root), ignore_errors=True)
     with zipfile.ZipFile(str(cache)) as z:
         z.extractall(str(icons_root))
-    # 解压后顶层是 Perfect-Icons-...-main/
+    # 解压后顶层是 icons-pack-...-main/
     tops = [p for p in icons_root.iterdir() if p.is_dir()]
     if not tops:
         return "fail", "图标包解压结果为空"
@@ -794,7 +794,7 @@ def run(cfg, steps=None, dry_run=False, offline=False, quiet=False):
 # --------------------------------------------------------------------------- CLI
 def cmd_list():
     print()
-    print("  14 Pro 修补步骤（来自 14PRO_SHALLOW_ROM/make.sh）:")
+    print("  14 Pro 修补步骤（来自 参考脚本）:")
     for s in ALL_STEPS:
         tag = "（可选）" if s in ("signature", "icons", "kernelsu") else ""
         print("    {:<16} {}{}".format(s, STEPS[s].__doc__ or "", tag))

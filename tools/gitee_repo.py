@@ -8,10 +8,10 @@ Gitee 的 git 推送必须带凭据，而「建仓库」这一步在网页上点
 用法：
 
     set GITEE_TOKEN=xxxx
-    python tools\\gitee_repo.py info   --owner h-shennong --repo XMAPort-SHALLOW
-    python tools\\gitee_repo.py create --owner h-shennong --repo XMAPort-SHALLOW ^
+    python tools\\gitee_repo.py info   --owner h-shennong --repo ShennongPort
+    python tools\\gitee_repo.py create --owner h-shennong --repo ShennongPort ^
         --description "小米 18 Pro Max → 14 Pro 移植流水线" --private
-    python tools\\gitee_repo.py ensure --owner h-shennong --repo XMAPort-SHALLOW
+    python tools\\gitee_repo.py ensure --owner h-shennong --repo ShennongPort
 
 `ensure` = 不存在就建（等价 create --if-missing），已存在只打印状态。
 """
@@ -80,7 +80,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Gitee 仓库操作")
     ap.add_argument("--token", default="", help="默认读 GITEE_TOKEN")
     ap.add_argument("--owner", default="h-shennong")
-    ap.add_argument("--repo", default="XMAPort-SHALLOW")
+    ap.add_argument("--repo", default="shennong-port")
     sub = ap.add_subparsers(dest="cmd")
     sub.add_parser("info", help="查仓库是否存在")
     p_c = sub.add_parser("create", help="建仓库")

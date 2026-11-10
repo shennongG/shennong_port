@@ -7,8 +7,8 @@
 会在项目根目录创建 workspace/，里面是假的 system/product/vendor 树、
 payload 镜像、fs_config/file_contexts。之后可以直接：
 
-    python XMAPort.py --auto --stage slim --device shennong --offline
-    python XMAPort.py --auto --stage pack --device shennong
+    python shennong_port.py --auto --stage slim --device shennong --offline
+    python shennong_port.py --auto --stage pack --device shennong
 """
 
 import sys

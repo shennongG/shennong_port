@@ -15,7 +15,7 @@ Gitee 的 Release 与附件走 OpenAPI v5，用个人令牌（私人令牌）鉴
 
     python tools/gitee_release.py list
     python tools/gitee_release.py create --tag sh-20261110-1530 \
-        --title "XMAPort-SHALLOW 20261110" --notes-file release/notes.md \
+        --title "ShennongPort 20261110" --notes-file release/notes.md \
         release/*.7z.001 workspace/output/*.zip
 
     :: 已有 tag 就先删/换 tag；只想传附件：
@@ -26,7 +26,7 @@ Gitee 的 Release 与附件走 OpenAPI v5，用个人令牌（私人令牌）鉴
 
 环境变量：
     GITEE_TOKEN    私人令牌（必需，除了 --help）
-    GITEE_REPO     owner/repo，默认 h-shennong/XMAPort-SHALLOW
+    GITEE_REPO     owner/repo，默认 h-shennong/shennong-port
     GITEE_API      API 根，默认 https://gitee.com/api/v5（Gitee 私有化可改）
 
 只依赖标准库：urllib + email 风格 multipart 手工拼装。
@@ -46,7 +46,7 @@ import uuid
 from pathlib import Path
 
 API = os.environ.get("GITEE_API", "https://gitee.com/api/v5").rstrip("/")
-DEFAULT_REPO = os.environ.get("GITEE_REPO", "h-shennong/XMAPort-SHALLOW")
+DEFAULT_REPO = os.environ.get("GITEE_REPO", "h-shennong/shennong-port")
 
 # Gitee 单附件大小上限（企业版 100 MB / 社区版更小），超过就分卷
 ATTACH_WARN = 90 * 1024 * 1024

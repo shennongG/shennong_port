@@ -1,11 +1,11 @@
 # 已知限制 / 未覆盖项
 
-合并版的目标是「一条命令跑完 移植→精简→打包」，并没有假装移植 make.sh 的每一行。
+本项目的目标是「一条命令跑完 移植→精简→打包」，也没有假装覆盖所有分支。
 下面这些部分**没有**搬过来，代码里会明确 `skip` 并写日志，不会静默失败。
 
 ## 1. vendor_boot 的 first_stage_ramdisk/fstab.qcom
 
-make.sh 用 `magiskboot unpack` + `cpio` 解出 `vendor_boot.img → ramdisk`，
+参考实现用 `magiskboot unpack` + `cpio` 解出 `vendor_boot.img → ramdisk`，
 替换 `first_stage_ramdisk/fstab.qcom` 后重新压缩/封包。这一步需要：
 
 * Linux 版 `magiskboot`（Windows 版不可用）；
@@ -16,7 +16,7 @@ make.sh 用 `magiskboot unpack` + `cpio` 解出 `vendor_boot.img → ramdisk`，
 但 first-stage 仍用底包原 fstab。多数情况下这两份内容一致；
 若底包与移植包的分区布局差异很大，可能卡 first stage。
 
-**手动做法**：在 Linux（或 WSL）里按 make.sh 那一段执行一次，或
+**手动做法**：在 Linux（或 WSL）里按参考实现那一段执行一次，或
 `fastboot flash vendor_boot vendor_boot-patched.img`。
 
 ## 2. KernelSU 注入
@@ -42,7 +42,7 @@ make.sh 用 `magiskboot unpack` + `cpio` 解出 `vendor_boot.img → ramdisk`，
 
 ## 4. 完美图标（可选）
 
-`step_icons` 会联网拉 `pzcn/Perfect-Icons-Completion-Project`，重建
+`step_icons` 会联网拉 `icons-pack-project`，重建
 `product/media/theme/default/icons` 与 `dynamicicons`。默认关闭，因为：
 
 * 需要访问 GitHub；
@@ -53,13 +53,13 @@ make.sh 用 `magiskboot unpack` + `cpio` 解出 `vendor_boot.img → ramdisk`，
 ## 5. 云上传
 
 上游 14PRO 的 workflow 里有 Oracle S3 上传（依赖私有 `secrets.confbase64`），
-合并版的 CI 只发 GitHub Release。
+CI 分工：Gitee Go 只跑轻量校验，ROM 产物由 `ci/run_pipeline.ps1` 或手工发到 Gitee Release（见 GITEE.md）。
 
 ## 6. 真机验证
 
 没有 14 Pro 实机，也没有实际下载十几 GB 的 ROM。已完成的验证：
 
-* `python XMAPort.py --selftest`（工具链/模块/配置）；
+* `python shennong_port.py --selftest`（工具链/模块/配置）；
 * `tests/test_stages.py`（合成数据覆盖精简与修补）；
 * 合成工作区端到端跑通 `--stage slim` + `--stage pack`：
   `mkfs.erofs` 实际打包、`lpmake` 实际生成 sparse super、`zstd` + `7z` 实际出 zip。
@@ -80,9 +80,9 @@ make.sh 用 `magiskboot unpack` + `cpio` 解出 `vendor_boot.img → ramdisk`，
 
 ## 8. 其他小差异
 
-* `make.sh` 里 `sudo find … -iname "*x*"` 是「任意层级目录」；合并版只在这些分区的
+* 早期实现里 `sudo find … -iname "*x*"` 是「任意层级目录」；本项目只在这些分区的
   指定子目录下递归，范围更保守。
 * `bootanimation.zip`、`wallpaper` 等被通用档位 `media` 删除时不受保护名单限制
   （应用清单删除仍受保护），因为 `media` 档位就是显式要删它们。
-* zip 内文件 mtime 固定为 2009-01-01（对齐 make.sh 的 `touch -t`），
+* zip 内文件 mtime 固定为 2009-01-01（对齐参考实现的 `touch -t`），
   但 super.img 内部时间戳仍由 `mkfs.erofs -T` 决定，`utc_stamp` 留空时每次不同。

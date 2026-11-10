@@ -5,7 +5,7 @@
 
 sdat2img 算法源自 xpirt/luxi78 (MIT)。
 
-目录约定（XMAPort 流程）：
+目录约定（本流水线）：
   transfer list / new.dat 位于 rom_dir 内（任意深度）。
   找到 "*.transfer.list" 后，在同目录下找同前缀的 new.dat（含 .br/.xz/.1/.2 分卷），
   输出 .img 写入 out_dir/<prefix>.img。

@@ -6,7 +6,7 @@
     python tests/test_stages.py
 
 覆盖：
-  * slim.py 的 5 组 make.sh 清单 + media 档位 + 保护名单
+  * slim.py 的 5 组 参考清单 + media 档位 + 保护名单
   * shennong_patch.py 的资源类步骤（overlay / device_features / displayconfig /
     PowerKeeper / MiAON / camera 拼接 / MSA / bootanimation / fstab / firmware）
   * build.prop 统一（版本号替换、ro.build.user、机型名、vendor 属性）

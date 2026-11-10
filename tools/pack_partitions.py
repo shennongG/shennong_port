@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 分区打包器 + 权限自动补全 Powered by GLM-5.2, Only used for XMAPort.
+# 分区打包器 + 权限自动补全 Powered by GLM-5.2, ShennongPort 专用.
 
 # 目录约定
 # work/                                  = 工作根（source_dir 的父目录）

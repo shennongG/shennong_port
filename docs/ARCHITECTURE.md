@@ -50,8 +50,8 @@
 | `system_dlkm` | 底包（存在才加） | 直接复制 |
 | `vbmeta*` | 底包 | 复制 + 禁验 |
 
-> 14PRO_SHALLOW_ROM 原脚本把 `mi_ext/odm/vendor/vendor_dlkm/system_dlkm` 全部取自底包；
-> 本合并版默认跟随它（`mi_ext_source=target`），但保留 XMAPort 的 `source` 选项。
+> 早期实现把 `mi_ext/odm/vendor/vendor_dlkm/system_dlkm` 全部取自底包；
+> 本项目默认沿用（`mi_ext_source=target`），同时保留 `mi_ext_source=source` 选项。
 
 ## 3. super 预算与布局
 
@@ -71,12 +71,12 @@ usable = budget - metadata_size × metadata_slots - margin
 
 super 布局由 `super_style` 决定：
 
-* `split_ab`（默认）：参考 14 Pro 成品包 在 shennong 验证过的布局 ——
+* `split_ab`（默认）：14 Pro 参考成品包在 shennong 验证过的布局 ——
   只有 `<name>_a`、单 group `qti_dynamic_partitions_a`、
   `-F --virtual-ab`，raw 输出（`sparse=false`）；
-* `single`：XMAPort 原始的单 group 布局，仅用于实验。
+* `single`：ShennongPort 原始的单 group 布局，仅用于实验。
 
-`lpmake` 返回「空间不足」时，XMAPort 原有兜底会跑 `make_hyper.py extreme` 并只重打 product。
+`lpmake` 返回「空间不足」时，ShennongPort 原有兜底会跑 `make_hyper.py extreme` 并只重打 product。
 
 ## 4. 模块边界
 

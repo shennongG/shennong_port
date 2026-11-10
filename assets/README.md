@@ -9,11 +9,11 @@ python tools\assets.py verify           :: 校验大小
 python tools\assets.py mirrors --probe  :: 探测哪条镜像通
 ```
 
-来源：上游 [XHR222/14PRO_SHALLOW_ROM](https://github.com/XHR222/14PRO_SHALLOW_ROM)
+来源：上游 [见 NOTICE/参考包](https://github.com/见 NOTICE/参考包)
 的 `shennong_files/`。Gitee 版默认按镜像链下载，顺序：
 
 ```
-gitee:h-shennong/14PRO_SHALLOW_ROM  →  ghfast.top  →  gh-proxy.com
+gitee:h-shennong/参考包  →  ghfast.top  →  gh-proxy.com
 →  ghproxy.net  →  raw.githubusercontent.com
 ```
 
@@ -21,7 +21,7 @@ gitee:h-shennong/14PRO_SHALLOW_ROM  →  ghfast.top  →  gh-proxy.com
 
 ```ini
 [shennong]
-asset_base=https://gitee.com/h-shennong/14PRO_SHALLOW_ROM/raw/main/shennong_files/
+asset_base=https://gitee.com/h-shennong/参考包/raw/main/shennong_files/
 ;; 或追加前缀到链首，仍保留回落
 asset_mirrors=https://ghfast.top/
 ```

@@ -15,7 +15,7 @@
 ## 1. 体积：7.75 GiB 怎么来的
 
 ```
-device_size (super)        = 8 321 499 136 B   (7.75 GiB，14PRO_SHALLOW_ROM 实机验证)
+device_size (super)        = 8 321 499 136 B   (7.75 GiB，参考成品包实机验证)
 metadata 65536 × 3 slots   =   196 608 B
 margin（对齐/余量）        = 67 108 864 B      (64 MiB)
 --------------------------------------------------------------
@@ -30,7 +30,7 @@ usable                     = 8 254 193 664 B   (7.69 GiB)
 
 18 Pro Max 的 system/product 通常明显大于 7.75 GiB，所以打包阶段有 **两级精简**：
 
-* Step 6（固定）：14PRO_SHALLOW_ROM 的 5 组应用清单 + `slim_tiers=media,preinstall`；
+* Step 6（固定）：参考成品包的 5 组应用清单 + `slim_tiers=media,preinstall`；
 * Step 7（动态）：`auto_fit=true` 时，用**真实镜像大小**复查预算，超出就依次启用
   `auto_fit_tiers=apps,audio,media,preinstall`，只重打 `system/system_ext/product`，
   再复查，直到装得下或档位用尽。
@@ -60,9 +60,9 @@ Step 6 会用 `shennong_files/` 把 14 Pro 的整套配置换回去：
 | 版本信息 | build.prop 统一为底包版本 + `ro.product.product.name=shennong` |
 | 恢复/OTA | 删除 `recovery-from-boot.p`、`install-recovery.sh`，内置 TWRP |
 
-## 3. super 布局：照抄 参考 14 Pro 成品包 的成品包
+## 3. super 布局：对齐 14 Pro 实机布局
 
-用 `lpdumps` 读参考包的 images/super.img，得到：
+用 `lpdumps` 读参考成品包的 images/super.img，得到：
 
 ```
 Metadata version: 10.2   slots: 3   flags: virtual_ab_device
@@ -82,9 +82,9 @@ lpmake --metadata-size 65536 --super-name super --block-size 4096 \
   --virtual-ab -F --output super.img
 ```
 
-合并版默认 `super_style=split_ab` 完全复刻这套参数（`-F` 输出完整 raw 镜像，
+本项目默认 `super_style=split_ab` 采用与实机一致的参数（`-F` 输出完整 raw 镜像，
 `sparse=false`），TWRP 的 `update-binary` 和 Windows 线刷脚本都能直接刷。
-XMAPort 原来的单 group 布局仍保留为 `super_style=single`，只建议做实验时用。
+ShennongPort 原来的单 group 布局仍保留为 `super_style=single`，只建议做实验时用。
 
 卡刷包结构也对齐参考包：`images/super.img.zst`、`images/*.img`、
 `bin/android/{7zzs,zstd}`、`bin/Windows/*`、现生成的 `update-binary` 和
@@ -146,7 +146,7 @@ FlashWindows.bat
 
 建议全程保留一个可用的 TWRP / 底包线刷包，至少能回滚。
 
-## 7. 与 14PRO_SHALLOW_ROM 的差异
+## 7. 与 参考成品包的差异
 
 * 输入从「已经移植好的卡刷包」变成「源 ROM + 底包」两个直链，移植在流水线内完成；
 * 应用清单、资源替换、build.prop、lpmake 参数、zip 命名保持一致；

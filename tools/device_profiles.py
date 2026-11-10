@@ -6,7 +6,7 @@
   * 预算 = min(config, 底包实测, 本表) —— 填大了也不会真的按大值打包。
 
 注意：
-  * `budget` 是「本次移植允许占用的 super 上限」，来自 14PRO_SHALLOW_ROM 的
+  * `budget` 是「本次移植允许占用的 super 上限」，来自 参考包的
     `lpmake --device super:8321499136`（7.75 GiB），已在该项目的刷机包上验证；
   * 真机核实方法：`fastboot getvar partition-size:super`，返回值必须 >= budget。
 """
@@ -25,7 +25,7 @@ PROFILES = {
         "density": 560,
         "refresh_rate": 120,
         "verified": True,
-        "note": "budget 与分区布局来自 14PRO_SHALLOW_ROM 的实机刷机包",
+        "note": "budget 与分区布局来自 参考包的实机刷机包",
     },
     # 小米 18 Pro Max（移植源，仅记录平台与代号，不参与预算）
     "madrid": {

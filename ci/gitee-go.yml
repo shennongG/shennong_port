@@ -1,4 +1,4 @@
-# XMAPort-SHALLOW / Gitee Go 流水线（轻量校验 + 源码包）
+# ShennongPort / Gitee Go 流水线（轻量校验 + 源码包）
 #
 # 放这里的目的：Gitee 侧不需要 GitHub Actions 也能跑起来。
 # Gitee Go 的 runner 是 Linux，没有 Windows/40 GB 磁盘，因此这里只做
@@ -17,7 +17,7 @@
 
 version: 1.0
 name: xmaport-shallow
-displayName: XMAPort-SHALLOW 校验
+displayName: ShennongPort 校验
 
 triggers:
   trigger: auto
@@ -42,9 +42,9 @@ stages:
           commands:
             - python -V
             # 1) 全仓库语法编译（不产生 pyc 入库）
-            - python -m compileall -q XMAPort.py tools tests
+            - python -m compileall -q shennong_port.py tools tests
             # 2) 自检：只验工具链/配置/模块，不联网、不下 ROM
-            - python XMAPort.py --selftest
+            - python shennong_port.py --selftest
             # 3) 离线单元回归（合成数据，不需要 ROM）
             - python tests/test_stages.py
             - python tests/test_payload_args.py
@@ -68,12 +68,12 @@ stages:
           pythonVersion: "3.12"
           commands:
             - mkdir -p release
-            - cp XMAPort.py config.ini LICENSE README.md release/
+            - cp shennong_port.py config.ini LICENSE README.md release/
             - cp -r tools docs ci release/
             # 卡刷包要的工具在 tools/ 里，已经一起带走；workspace 不入包
-            - cd release && zip -qr ../XMAPort-SHALLOW-src.zip . && cd ..
-            - ls -lh XMAPort-SHALLOW-src.zip
+            - cd release && zip -qr ../ShennongPort-src.zip . && cd ..
+            - ls -lh ShennongPort-src.zip
           artifacts:
             - name: source-package
               path:
-                - XMAPort-SHALLOW-src.zip
+                - ShennongPort-src.zip

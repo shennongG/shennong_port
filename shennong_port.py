@@ -45,7 +45,7 @@ def init_console(auto=False):
     os.system("")
     # 设置控制台窗口标题（auto 模式下跳过）
     if not auto:
-        os.system("title XMAPort-SHALLOW - port / slim / pack")
+        os.system("title ShennongPort - port / slim / pack")
     # 防止非 UTF-8 终端下中文输出崩溃
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -76,7 +76,7 @@ LPM = TOOLS / "lpmake.exe"
 LPD = TOOLS / "lpdumps.exe"
 HLP = TOOLS / "img_helper.py"
 
-# ---------------- 合并版：精简 / 打包阶段 ----------------
+# ---------------- 本项目：精简 / 打包阶段 ----------------
 sys.path.insert(0, str(TOOLS))
 try:
     import stage_common as scommon
@@ -226,50 +226,38 @@ def tool_status(pause_after=True):
     print("  {}|  Tools Checking, please wait for 5 seconds                |{}".format(C, N))
     print("  {}+----------------------------------------------------------+{}".format(C, N))
     print()
-    print("  {}{:<20} {}".format(W, "Tool", "Source" + N))
+    print("  {}{:<20} {}".format(W, "Tool", "Component" + N))
     print("  " + D + "----------------------------------------------------------" + N)
-    check_tool("aria2c.exe", "github.com/aria2/aria2")
-    check_tool("7z.exe", "www.7-zip.org")
-    check_tool("payload-dumper-go.exe", "github.com/ssut/payload-dumper-go")
-    check_tool("simg2img.exe", "AOSP system/core/libsparse")
-    check_tool("img2simg.exe", "AOSP system/core/libsparse")
-    check_tool("lpunpack.exe", "AOSP extras/partition_tools")
-    check_tool("lpmake.exe", "AOSP extras/partition_tools")
-    check_tool("lpdumps.exe", "AOSP extras/partition_tools")
-    check_tool("img_helper.py", "XMAPort bundled script")
-    check_tool("pack_partitions.py", "XMAPort bundled script")
+    check_tool("aria2c.exe", "bundled downloader")
+    check_tool("7z.exe", "bundled archiver")
+    check_tool("payload-dumper-go.exe", "bundled payload extractor")
+    check_tool("simg2img.exe", "bundled sparse image tool")
+    check_tool("img2simg.exe", "bundled sparse image tool")
+    check_tool("lpunpack.exe", "bundled partition tool")
+    check_tool("lpmake.exe", "bundled partition tool")
+    check_tool("lpdumps.exe", "bundled partition tool")
+    check_tool("img_helper.py", "内置脚本")
+    check_tool("pack_partitions.py", "内置脚本")
     print("  " + D + "----------------------------------------------------------" + N)
     if pause_after:
         pause()
 
 
-# ---------------- [C] 开源致谢 ----------------
-def show_credits_entry(no, name, desc, url, lic):
-    print("  {}  {}. {}{}".format(G, no, name, N))
-    print("  {}     {}{}".format(W, desc, N))
-    print("  {}     {}{}".format(C, url, N))
-    print("  {}     credit: {}{}".format(D, lic, N))
-    print()
-
-
-def show_credits():
+# ---------------- [C] 许可证与第三方声明 ----------------
+def show_notice():
+    """只报路径，不在这里展开第三方清单：声明统一由 NOTICE.md + licenses/ 承载。"""
     os.system("cls" if os.name == "nt" else "clear")
     print()
     print("  {}{}============================================================{}".format(C, BD, N))
-    print("  {}{}  Open-source credits{}".format(C, BD, N))
+    print("  {}{}  Licenses / Third-party notices{}".format(C, BD, N))
     print("  {}{}============================================================{}".format(C, BD, N))
     print()
-    show_credits_entry(1, "aria2c", "Multi-threaded downloader", "https://github.com/aria2/aria2", "GPL v2")
-    show_credits_entry(2, "7-Zip (7z.exe)", "Archive extractor", "https://www.7-zip.org/", "GNU LGPL")
-    show_credits_entry(3, "payload-dumper-go", "Android OTA payload.bin extractor",
-                       "https://github.com/ssut/payload-dumper-go", "MIT")
-    show_credits_entry(4, "AOSP partition tools", "lpunpack, lpmake, lpdumps",
-                       "https://github.com/nicktal01/aosp15_partition_tools", "Apache 2.0")
-    show_credits_entry(5, "erofs-utils", "EROFS image creation and extraction", "https://github.com/erofs/erofs-utils", "GPL v2")
-    show_credits_entry(6, "e2fsprogs", "ext4 tools: mke2fs, e2fsdroid", "https://github.com/tytso/e2fsprogs", "GPL v2 / LGPL v2")
-    show_credits_entry(7, "Google Brotli", "Block OTA Brotli decompression", "https://github.com/google/brotli", "MIT")
-    show_credits_entry(8, "Magisk", "Verified AVB verification-disable pattern", "https://github.com/topjohnwu/Magisk", "GPL v3")
-    print("  " + D + "----------------------------------------------------------" + N)
+    print("  {}{}  NOTICE.md   {}".format(W, "第三方组件、商标与免责声明", N))
+    print("  {}{}  licenses/   {}".format(W, "随包组件的许可证正文", N))
+    print("  {}{}  LICENSE     {}".format(W, "本项目自身的 MIT 许可", N))
+    print()
+    print("  {}{}  分发卡刷包时，以上文件会一并放入 zip 的 NOTICE/ 目录。{}".format(D, N))
+    print()
     pause()
 
 
@@ -408,7 +396,7 @@ def read_packing_config():
         "utc_stamp": "",
         "erofs_old_kernel": "false",
         "device_platform": "qualcomm",
-        # ---- 14 Pro / 18 Pro Max 合并版新增 ----
+        # ---- 14 Pro / 18 Pro Max 本项目新增 ----
         "super_style": "split_ab",    # split_ab = 14 Pro 验证过的 _a/_b 布局
         "auto_fit": "true",           # 打包后按真实大小逐档精简
         "auto_fit_tiers": "",
@@ -445,7 +433,7 @@ def read_packing_config():
 # ---------------- 配置模板生成 ----------------
 def create_config():
     content = """; ============================================
-; XMAPort config file
+; ShennongPort config file
 ; ============================================
 
 ; Device platform: Qualcomm/MTK, must be filled in correctly
@@ -1492,7 +1480,7 @@ def stage_pack(pack_cfg, auto=False, offline=False):
         port_failed = True
         pause()
 
-    # 复制 mi_ext：14PRO 用底包，XMAPort 原版用源包，这里可配
+    # 复制 mi_ext：14PRO 用底包，早期版本用源包，这里可配
     mi_ext_src = str(pack_cfg.get("mi_ext_source", "target")).strip().lower()
     if mi_ext_src == "source":
         log_write("Copying mi_ext from source payload")
@@ -1612,7 +1600,7 @@ def stage_pack(pack_cfg, auto=False, offline=False):
     # vbmeta 禁验（在 super 打包之后、汇总之前，不受 pack_super 限制）
     patch_vbmeta(pack_cfg)
 
-    # ---- 卡刷包 zip（14PRO_SHALLOW_ROM 的输出形态）----
+    # ---- 卡刷包 zip（参考包的输出形态）----
     # 只有 lpmake 成功且没有分区打包失败时才做 zip；否则只会拿半个 super 去压缩。
     zip_name = ""
     if (super_rc == 0 and counters["pack_fail"] == 0
@@ -1718,7 +1706,7 @@ def stage_pack(pack_cfg, auto=False, offline=False):
 
 
 
-# ---------------- Step 6 精简（14PRO_SHALLOW_ROM 清单 + 功能修补） ----------------
+# ---------------- Step 6 精简（参考包 清单 + 功能修补） ----------------
 def unpack_vendor_for_patch(pack_cfg):
     """14 Pro 的 vendor 需要改动（fstab / build.prop / init.qcom.rc），先解包。"""
     if str(pack_cfg.get("repack_vendor", "true")).lower() != "true":
@@ -1812,7 +1800,7 @@ def one_click_port(auto=False, stage="all", offline=False):
     log_write("Target Device: {}".format(TARGET_DEVICE))
     print()
     print("  {}{}============================================================{}".format(C, BD, N))
-    print("  {}{}  XMAPort-SHALLOW (ShennongPort): port -> slim -> pack{}".format(C, BD, N))
+    print("  {}{}  ShennongPort (ShennongPort): port -> slim -> pack{}".format(C, BD, N))
     print("  {}{}============================================================{}".format(C, BD, N))
     print()
     print("  {}  Workflow:{}".format(W, N))
@@ -2020,8 +2008,8 @@ def one_click_port(auto=False, stage="all", offline=False):
         print("  移植阶段完成（Step 1-5）。工作区已就绪：")
         print("    Source FS: {}".format(SRC_FS))
         print("    Target FS: {}".format(TGT_FS))
-        print("  下一步: python XMAPort.py --stage slim   # 精简")
-        print("          python XMAPort.py --stage pack   # 打包")
+        print("  下一步: python shennong_port.py --stage slim   # 精简")
+        print("          python shennong_port.py --stage pack   # 打包")
         log_write("Stage port done, workspace ready")
         return 0
 
@@ -2172,7 +2160,7 @@ def show_menu():
     print()
     print("  {}{}  -- Tools --{}".format(Y, BD, N))
     print("  {}  [A] Command Executor{}".format(W, N))
-    print("  {}  [C] Open-Source Credits{}".format(W, N))
+    print("  {}  [C] Licenses / Third-party Notices{}".format(W, N))
     print("  {}  [D] Clean workspace{}".format(W, N))
     print()
     print("  {}{}============================================================{}".format(C, BD, N))
@@ -2184,7 +2172,7 @@ def show_menu():
 # ---------------- CLI 参数解析 ----------------
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="XMAPort-SHALLOW - HyperOS 移植 → 精简 → 打包 (XMAPort + 14PRO_SHALLOW_ROM)",
+        description="ShennongPort - HyperOS 移植 → 精简 → 打包 (移植 + 精简 + 打包)",
     )
     parser.add_argument("--auto", action="store_true",
                         help="Non-interactive mode for CI/GitHub Actions")
@@ -2232,7 +2220,7 @@ def selftest():
         pass
     ok = True
     print()
-    print("  ========== XMAPort-SHALLOW self-test (Gitee edition) ==========")
+    print("  ========== ShennongPort self-test (Gitee edition) ==========")
     print("  Python: {}  ({})".format(sys.version.split()[0], sys.executable))
     print()
     checks = [
@@ -2246,7 +2234,7 @@ def selftest():
         ("tools/jre/bin/java.exe", TOOLS / "jre" / "bin" / "java.exe"),
         ("tools/zstd.exe", TOOLS / "zstd.exe"),
         ("tools/flashtools.zip", TOOLS / "flashtools.zip"),
-        ("XMAPort_core: make_hyper.py", TOOLS / "make_hyper.py"),
+        ("移植核心: make_hyper.py", TOOLS / "make_hyper.py"),
         ("config.ini", CONFIG),
     ]
     for label, p in checks:
@@ -2348,7 +2336,7 @@ def main():
         d.mkdir(parents=True, exist_ok=True)
 
     if args.auto:
-        log_write("========== XMAPort-SHALLOW Auto Mode Start ==========")
+        log_write("========== ShennongPort Auto Mode Start ==========")
         try:
             result = one_click_port(auto=True, stage=args.stage, offline=args.offline)
         except ReturnToMenu:
@@ -2375,7 +2363,7 @@ def main():
         elif ch == "a":
             show_executor()
         elif ch == "c":
-            show_credits()
+            show_notice()
         elif ch == "d":
             clean_workspace()
         else:

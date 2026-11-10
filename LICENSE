@@ -1,8 +1,7 @@
 MIT License
 
-Copyright (c) 2025 NorthStarK-Lvy (XMAPort)
-Copyright (c) 2025 XHR222 (14PRO_SHALLOW_ROM)
-Copyright (c) 2025 ShennongPort contributors
+Copyright (c) 2025-2026 ShennongPort contributors
+Copyright (c) 2026 h-shennong
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -21,3 +20,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+本仓库包含来自其他项目的代码与二进制，它们各自的权利声明与许可证见
+NOTICE.md；随包分发组件的许可证正文见 licenses/ 目录。
+
+This project contains code and binaries from other projects. Their respective
+copyright notices and licenses are listed in NOTICE.md; full license texts for
+bundled components are in the licenses/ directory.

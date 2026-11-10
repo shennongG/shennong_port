@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    XMAPort-SHALLOW 构建流水线（Gitee 版：本地 / 自建 Windows runner / Gitee Go 都能直接跑）
+    ShennongPort 构建流水线（Gitee 版：本地 / 自建 Windows runner / Gitee Go 都能直接跑）
 
 .DESCRIPTION
     一条命令跑完 GitHub Actions 里那条 workflow 的全部内容：
@@ -51,7 +51,7 @@ param(
     # 发布到 Gitee Release（需要 GITEE_TOKEN）
     [switch]$Publish,
     [string]$Tag = '',
-    [string]$Repo = $(if ($env:GITEE_REPO) { $env:GITEE_REPO } else { 'h-shennong/XMAPort-SHALLOW' }),
+    [string]$Repo = $(if ($env:GITEE_REPO) { $env:GITEE_REPO } else { 'h-shennong/shennong-port' }),
 
     # 跳过分卷/发布，只留 workspace/output 里的 zip
     [switch]$NoPackage
@@ -93,7 +93,7 @@ Show-Disk
 
 # ---------------------------------------------------------------- 1. 自检
 Step '1. 自检（工具链 / 模块 / 配置）'
-Invoke-Py @('XMAPort.py', '--selftest')
+Invoke-Py @('shennong_port.py', '--selftest')
 if ($SelftestOnly) { Write-Host '  只自检，结束' -ForegroundColor Green; return }
 
 # ---------------------------------------------------------------- 2. 资源
@@ -107,7 +107,7 @@ if ($Stage -in @('all', 'slim', 'pack') -and -not $Offline) {
 
 # ---------------------------------------------------------------- 3. 主流程
 Step "3. 主流程（stage=$Stage）"
-$a = @('XMAPort.py', '--auto', '--device', $Device, '--stage', $Stage)
+$a = @('shennong_port.py', '--auto', '--device', $Device, '--stage', $Stage)
 if ($Offline) { $a += '--offline' }
 if ($NoSlim) { $a += '--no-slim' }
 if ($Source) { $a += @('--source', $Source) }
@@ -178,7 +178,7 @@ $files = @(Get-ChildItem $releaseDir -File | Where-Object { $_.Name -ne 'notes.m
 $files += @(Get-ChildItem 'workspace\*.log' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
 
 Invoke-Py (@('tools/gitee_release.py', '--repo', $Repo, 'create', '--tag', $Tag,
-               '--title', ("XMAPort-SHALLOW {0}" -f (Get-Date -Format 'yyyyMMdd')),
+               '--title', ("ShennongPort {0}" -f (Get-Date -Format 'yyyyMMdd')),
                '--notes-file', $notesFile) + $files)
 
 Write-Host ''

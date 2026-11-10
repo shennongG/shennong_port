@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""精简阶段（slim）：把 14PRO_SHALLOW_ROM 的删除清单变成可审计的 Python 模块
+"""精简阶段（slim）：把 参考包的删除清单变成可审计的 Python 模块
 
-上游 14PRO_SHALLOW_ROM 的 make.sh 用 5 组 `find -iname "*名字*"` 删应用，
-本文件把这份清单原样收录，并补上「按预算追加档位」的能力：
+上游 参考脚本用 5 组 `find -iname "*名字*"` 删应用，
+本文件把这份清单固定下来，并补上「按预算追加档位」的能力：
 
-    profile shennong   14 Pro 专用清单（make.sh 原样 5 组，默认）
+    profile shennong   14 Pro 专用清单（参考脚本5 组，默认）
     tiers media        开机动画 / 壁纸包
     tiers audio        系统铃声 / 通知音
     tiers preinstall   全部 data-app（比 shennong 组更狠）
@@ -35,11 +35,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import stage_common as sc  # noqa: E402
 
 # ---------------------------------------------------------------------------
-# 14PRO_SHALLOW_ROM / make.sh 的 5 组清单（顺序、名字逐字照抄）
+# 参考包 / 参考脚本的 5 组清单（顺序、名字对齐）
 #   part  = 分区
 #   sub   = 分区内相对目录
 #   apps  = 目录名包含任一关键词（大小写不敏感）即整棵删除
-# make.sh 里 `"CatchLog""com.xiaomi.ugd"` 实际会被 bash 拼成一个词，
+# 参考脚本里 `"CatchLog""com.xiaomi.ugd"` 实际会被 bash 拼成一个词，
 # 这里按作者本意拆成两个；`system` 这一条过宽，默认只匹配「名字以它开头」
 # 会在 --strict 下生效，见 MATCH_MODE。
 # ---------------------------------------------------------------------------
@@ -277,7 +277,7 @@ def _delete(abs_path, stash=False, part="", protect=True):
 # --------------------------------------------------------------------------- 命令
 def cmd_list():
     print()
-    print("  精简 profile: shennong（14PRO_SHALLOW_ROM 原清单，默认启用）")
+    print("  精简 profile: shennong（参考包 原清单，默认启用）")
     for i, g in enumerate(SHENNONG_GROUPS, 1):
         print("    {}. {:<24} {:<38} {:>3} 个关键词".format(
             i, g["id"], g["part"] + "/" + g["sub"], len(g["apps"])))
@@ -349,7 +349,7 @@ def _largest(top):
 
 def apply(profile="shennong", tiers=None, dry_run=False, stash=False,
           cfg=None, quiet=False):
-    """执行精简，返回 (rc, summary)。XMAPort 精简段直接 import 调用。"""
+    """执行精简，返回 (rc, summary)。精简段直接 import 调用。"""
     cfg = cfg or _config()
     keep = _keep_globs(cfg)
     tiers = [t.strip() for t in (tiers or []) if t.strip()]

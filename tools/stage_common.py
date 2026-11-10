@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""合并版流水线的公共设施（移植 / 精简 / 打包 三段共用）
+"""本项目流水线的公共设施（移植 / 精简 / 打包 三段共用）
 
 本文件只做四件事，避免三个阶段各写一套：
 
-1. 路径常量：与 XMAPort 原版完全一致（workspace/source_filesystem 等），
+1. 路径常量：与 早期版本完全一致（workspace/source_filesystem 等），
    这样「移植」阶段产出的工作区可以直接交给「精简」和「打包」。
 2. 配置读取：config.ini 同时兼容 GBK / UTF-8，既返回「扁平键」也返回
    「section.key」两种写法，精简段新增的键不会和老配置冲突。
-3. 分区根定位：XMAPort 解包出的 system 分区有时会多一层 system/ 目录
+3. 分区根定位：解包阶段出的 system 分区有时会多一层 system/ 目录
    （Android 11+ system_root 镜像），这里统一探测出「内容根」。
 4. 小工具：人类可读体积、bool 解析、安全删除（不跟随 junction/符号链接）。
 

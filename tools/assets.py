@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""资源下载器：14PRO_SHALLOW_ROM 的 shennong_files/
+"""资源下载器：14 Pro 专属资源的远程拉取与缓存
 
 14 Pro 的精简/修补离不开一批「14 Pro 专属」文件（相机、overlay、device_features、
-displayconfig、fstab、TWRP 等），它们在上游仓库里合计约 310 MiB。合并版不把这
-些二进制塞进本仓库，而是按清单下载、按大小校验、断点续传缓存到：
+displayconfig、fstab、TWRP 等），合计约 310 MiB。本仓库不把这些二进制塞进版本库，
+而是按清单下载、按大小校验、断点续传缓存到：
 
     assets/shennong_files/
 
 下载源是「镜像链」：按顺序尝试，前一个失败（超时/404/截断）自动换下一个，
 任一成功即写盘。顺序 = 显式配置 > 环境变量 > 内置镜像链（Gitee 镜像 →
-公益加速前缀 → GitHub 直连）：
+公益加速前缀 → 直连）：
 
     [shennong]
     ; 一条完整 base，指定后只走它（会排在链首，失败仍会回落）
-    asset_base=https://gitee.com/h-shennong/14PRO_SHALLOW_ROM/raw/main/shennong_files/
+    asset_base=https://gitee.com/h-shennong/rom-assets/raw/main/shennong_files/
     ; 或若干加速前缀 / 完整 base，逗号分隔，按序压到链首
     asset_mirrors=https://ghfast.top/,https://gh-proxy.com/
 
@@ -40,14 +40,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import stage_common as sc  # noqa: E402
 
-# --------------------------------------------------------------- 上游 / 镜像常量
-RAW_BASE = ("https://raw.githubusercontent.com/XHR222/"
-            "14PRO_SHALLOW_ROM/main/shennong_files/")
+# --------------------------------------------------------------- 资源来源 / 镜像
+# 说明见 NOTICE.md「运行期资源」：这些 URL 只用于下载，资源本身不随本仓库分发，
+# 版权与许可见其原始出处。想完全脱离外部源，把资源缓存进 assets/shennong_files/
+# 并在 config.ini 里把 asset_base 指到内网/Gitee 镜像即可。
+UPSTREAM_ASSET_BASE = (
+    "https://raw.githubusercontent.com/XHR222/14PRO_SHALLOW_ROM/main/shennong_files/")
 
-# Gitee 镜像：在 Gitee「新建仓库 → 导入已有仓库」把 XHR222/14PRO_SHALLOW_ROM
-# 导一份到本账号下，国内下载就走这条（不限速、不吃代理）。
+# 可选：自己在 Gitee 上导入一份资源镜像（仓库名 rom-assets），国内下载走这条最快
 GITEE_OWNER = "h-shennong"
-GITEE_MIRROR_REPO = "14PRO_SHALLOW_ROM"
+GITEE_MIRROR_REPO = "rom-assets"
 GITEE_BASE = "https://gitee.com/{owner}/{repo}/raw/main/shennong_files/".format(
     owner=GITEE_OWNER, repo=GITEE_MIRROR_REPO)
 
@@ -58,16 +60,16 @@ PROXY_PREFIXES = (
     "https://ghproxy.net/",
 )
 
-# 完美图标（可选步骤 icons 用）：同样的镜像思路
+# 图标包（可选步骤 icons 用）：同样的镜像思路，仓库名见 NOTICE.md
 ICON_REPO = "pzcn/Perfect-Icons-Completion-Project"
 ICON_BRANCH = "main"
 
 
 def default_bases():
-    """内置镜像链：Gitee 镜像 → 加速前缀 → GitHub 直连。"""
+    """内置镜像链：Gitee 镜像 → 加速前缀 → 直连。"""
     bases = [GITEE_BASE]
-    bases += [p + RAW_BASE for p in PROXY_PREFIXES]
-    bases.append(RAW_BASE)
+    bases += [p + UPSTREAM_ASSET_BASE for p in PROXY_PREFIXES]
+    bases.append(UPSTREAM_ASSET_BASE)
     return bases
 
 
@@ -84,7 +86,7 @@ def _expand(entry):
         e += "/"
     if "shennong_files/" in e:
         return e
-    return e + RAW_BASE
+    return e + UPSTREAM_ASSET_BASE
 
 
 def base_urls(cfg=None):
@@ -300,7 +302,7 @@ def ensure_for_steps(steps, cfg=None, offline=False, quiet=False):
 
 # ------------------------------------------------------------ 完美图标（icons 步骤）
 def icon_urls(cfg=None):
-    """Perfect-Icons 压缩包的镜像链（codeload / Gitee 镜像 / 加速前缀）。"""
+    """图标包 压缩包的镜像链（codeload / Gitee 镜像 / 加速前缀）。"""
     cfg = cfg or sc.read_ini()
     sec = cfg.get("sections", {}).get("shennong", {})
     explicit = _split_list(sec.get("icons_url", ""))
@@ -322,7 +324,7 @@ def icon_urls(cfg=None):
 
 
 def fetch_icons(dest, cfg=None, quiet=False):
-    """下载 Perfect-Icons.zip 到 dest；成功返回 True。"""
+    """下载 icons-pack.zip 到 dest；成功返回 True。"""
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
@@ -341,7 +343,7 @@ def fetch_icons(dest, cfg=None, quiet=False):
             if total > (1 << 20) and zipfile_is_zip(part):
                 os.replace(part, dest)
                 if not quiet:
-                    print("    [OK] Perfect-Icons.zip {} <- {}".format(
+                    print("    [OK] icons-pack.zip {} <- {}".format(
                         sc.human(total), short_base(url.split("/zip/")[0] + "/")))
                 return True
         except Exception:                            # noqa: BLE001

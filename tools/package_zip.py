@@ -526,6 +526,24 @@ def _check_vbmeta(images):
         print("  [pack] vbmeta: verity + verification 已关闭")
 
 
+def _stage_notice(stage):
+    """把 NOTICE.md 与 licenses/ 放进 zip 的 NOTICE/：随二进制一起给接收方声明。"""
+    dest = stage / "NOTICE"
+    dest.mkdir(parents=True, exist_ok=True)
+    notice = sc.ROOT / "NOTICE.md"
+    if notice.is_file():
+        shutil.copy2(str(notice), str(dest / "NOTICE.md"))
+    lic = sc.ROOT / "licenses"
+    if lic.is_dir():
+        for f in sorted(lic.iterdir()):
+            if f.is_file():
+                shutil.copy2(str(f), str(dest / f.name))
+    lic2 = sc.ROOT / "LICENSE"
+    if lic2.is_file():
+        shutil.copy2(str(lic2), str(dest / "LICENSE"))
+    return dest
+
+
 def _write_readme(stage, info):
     """zip 根目录的中文说明（GBK，方便 Windows 记事本直接打开）。"""
     has_twrp = (stage / "images" / "recovery_twrp.img").is_file()
@@ -563,6 +581,10 @@ def _write_readme(stage, info):
         "  得到本 zip 后再按上面步骤操作。",
         "- super 是 raw 镜像，压缩在 images/super.img.zst 里，",
         "  刷机脚本会先解压，请预留至少 10 GB 磁盘空间。",
+        "",
+        "【声明】",
+        "- 包内 bin/ 与固件镜像含第三方组件，版权与许可证见 NOTICE/ 目录",
+        "  （NOTICE.md + licenses/），分发时请一并保留。",
         "",
     ]
     dest = stage / "刷机说明.txt"
@@ -632,6 +654,7 @@ def build(cfg, compress=None, dry_run=False, quiet=False):
     _write_updater(stage, info)
     _write_flash_bat(stage, info)
     _write_readme(stage, info)
+    _stage_notice(stage)
 
     _touch_tree(stage)
     if not SEVEN_ZIP.is_file():

@@ -37,19 +37,19 @@ auto_fit_tiers=apps,audio,media,preinstall
 ## 3. 一次完整运行
 
 ```bat
-python XMAPort.py --selftest
+python shennong_port.py --selftest
 python tools\assets.py fetch
-python XMAPort.py --auto --device shennong
+python shennong_port.py --auto --device shennong
 ```
 
 中间想停/改：
 
 ```bat
-python XMAPort.py --auto --device shennong --stage port
+python shennong_port.py --auto --device shennong --stage port
 python tools\slim.py plan --top 30          :: 看还能砍什么
 :: 改 config.ini 的 slim_tiers / extra_remove
-python XMAPort.py --auto --device shennong --stage slim
-python XMAPort.py --auto --device shennong --stage pack
+python shennong_port.py --auto --device shennong --stage slim
+python shennong_port.py --auto --device shennong --stage pack
 ```
 
 > `--stage slim` / `--stage pack` 需要工作区已存在（至少 `source_filesystem`）。
@@ -70,7 +70,7 @@ python tools\shennong_patch.py list
 python tools\pack_partitions.py erofs lz4hc,9 workspace\source_filesystem\product workspace\packed
 
 :: 用 packed 里现成镜像重新合成 super（等价主菜单 [A]）
-python XMAPort.py      :: 然后按 A -> 1
+python shennong_port.py      :: 然后按 A -> 1
 
 :: 只出 zip（super.img 已存在）
 python tools\package_zip.py
@@ -175,7 +175,7 @@ fastboot reboot
   检查 `workspace/packed/vbmeta.img` 是否来自底包、`patch_vbmeta=true`。
 
 **Q：super.img 是 7.75 GiB 整？**
-`super_style=split_ab` 用了 `-F`，lpmake 会输出完整 raw 镜像（与 参考成品包一致）。
+`super_style=split_ab` 用了 `-F`，lpmake 会输出完整 raw 镜像（与参考成品包一致）。
 zip 里是 `images/super.img.zst`，体积由实际数据决定，刷入前脚本会解压。
 
 **Q：zip 里没有 images/super.img.zst？**
@@ -194,7 +194,7 @@ recovery_img=assets/root_images/recovery_twrp.img.zst
 flash_recovery=true
 ```
 
-重跑 `python XMAPort.py --auto --stage pack --device shennong` 即可；
+重跑 `python shennong_port.py --auto --stage pack --device shennong` 即可；
 打包后 `images/recovery_twrp.img` 会被线刷脚本和卡刷脚本刷到 `recovery_a/_b`。
 默认用仓库自带的 `assets/root_images/recovery_twrp.img.zst`（100 MB 的 TWRP 压缩后 61 MB，
 避免超 GitHub 单文件限制）；留空则用 `assets/shennong_files/recovery.zip`。
@@ -212,7 +212,7 @@ flash_recovery=true
 
 ```bat
 :: 保留工作区（推荐，便于 --stage slim/pack 续跑）
-python XMAPort.py    :: 菜单 D 会删整个 workspace
+python shennong_port.py    :: 菜单 D 会删整个 workspace
 
 :: 只删打包中间产物
 rmdir /s /q workspace\package_stage

@@ -1,4 +1,4 @@
-# XMAPort-SHALLOW :: 换行与二进制口径（Gitee 上按 UTF-8 网页编辑、Windows 上按 CRLF 检出）
+# ShennongPort :: 换行与二进制口径（Gitee 上按 UTF-8 网页编辑、Windows 上按 CRLF 检出）
 #
 # 1) 文本统一以 LF 入库，检出时按下面规则还原，避免 Gitee 网页编辑器把整文件标成改动；
 # 2) Windows 脚本（bat/cmd/ps1/reg）必须 CRLF，否则 cmd.exe 解析会出怪问题；

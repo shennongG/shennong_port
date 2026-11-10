@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location("xm", str(ROOT / "XMAPort.py"))
+spec = importlib.util.spec_from_file_location("xm", str(ROOT / "shennong_port.py"))
 xm = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(xm)
 
