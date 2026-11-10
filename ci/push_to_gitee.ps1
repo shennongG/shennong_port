@@ -45,7 +45,10 @@ param(
     [string]$SslBackend = 'openssl',
 
     # 没给令牌时从剪贴板取（在浏览器里生成令牌 -> 复制 -> 直接跑本脚本）
-    [switch]$UseClipboard
+    [switch]$UseClipboard,
+
+    # 推送成功后把令牌交给凭据管理器（GCM），之后 git push gitee 不再要令牌
+    [switch]$NoRemember
 )
 
 $ErrorActionPreference = 'Stop'
@@ -108,6 +111,15 @@ $pushUrl = "https://oauth2:$Token@gitee.com/$slug.git"
 & git -c "http.sslBackend=$SslBackend" push $pushUrl "${branch}:${branch}" --progress
 if ($LASTEXITCODE -ne 0) {
     throw '  [X] 推送失败：检查令牌是否勾了 projects、仓库是否为空仓、网络是否被拦'
+}
+
+if (-not $NoRemember) {
+    # 存进 Windows 凭据管理器（GCM/DPAPI），以后 git push gitee 免令牌
+    $credText = "protocol=https`r`nhost=gitee.com`r`nusername=oauth2`r`npassword=$Token`r`n`r`n"
+    $credText | git credential approve
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host '  令牌已交给凭据管理器，后续 git push gitee 免令牌（-NoRemember 可关闭）' -ForegroundColor DarkGray
+    }
 }
 
 if ($AllRefs) {
