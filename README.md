@@ -1,7 +1,8 @@
 # ShennongPort
 
-[![star](https://gitee.com/h-shennong/shennong-port/badge/star.svg?theme=dark)](https://gitee.com/h-shennong/shennong-port/stargazers)
-[![fork](https://gitee.com/h-shennong/shennong-port/badge/fork.svg?theme=dark)](https://gitee.com/h-shennong/shennong-port/members)
+[![repo](https://img.shields.io/badge/GitHub-shennongG%2Fshennong__port-181717?logo=github)](https://github.com/shennongG/shennong_port)
+[![route](https://img.shields.io/badge/route-17%20Ultra%20%E2%86%92%2014%20Pro-2ea44f)](docs/PORT_NEZHA_TO_14PRO.md)
+[![baseline](https://img.shields.io/badge/baseline-Rom6%20verified-blue)](reference/rom6_reference.json)
 ![](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4)
 ![](https://img.shields.io/badge/python-3.8%2B-3776ab)
 
@@ -48,9 +49,9 @@
 
 ```bat
 :: 0) 环境：Python 3.8+（建议 3.12），约 40 GB 磁盘
-git clone https://github.com/long969697262/shennong_port.git
+git clone https://github.com/shennongG/shennong_port.git
 cd shennong_port
-::    Gitee 镜像：git clone https://gitee.com/h-shennong/XMAPort-SHALLOW.git
+::    国内网络可用自建 Gitee 镜像（见 docs/GITEE.md），没有就用 GitHub
 
 :: 1) 自检：工具链 / 模块 / 配置 / 路线 / 基线，应该全 [OK]
 python shennong_port.py --selftest
