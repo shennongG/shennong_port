@@ -33,6 +33,14 @@
 与本项目 `config.ini` 的默认值是同一对版本。这一点很重要——换任何一个版本，
 `odm`/`vendor`/框架的差距都会变，移植结果就不等价了。
 
+`config.ini` 里默认就钉着这条源包直链（已核验）：
+
+```
+nezha-ota_full-OS4.0.7.0.XPACNXM-user-17.0-5d0985edfa.zip
+  → https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/OS4.0.7.0.XPACNXM/…
+  → HEAD 200 / 10 513 696 443 B（9.79 GiB）
+```
+
 从同一个包里还能读出（`python tools\ref_check.py package D:\Rom6`）：
 
 | 观察 | 数值 | 对本项目的意义 |
