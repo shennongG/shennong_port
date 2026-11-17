@@ -306,6 +306,16 @@ recovery_twrp.img.zst         TWRP（压缩存放，打包时解压为 recovery_
 卡刷 `update-binary` 用音量键 `[-]` 切换、`[+]` 确认。两者都会先刷官方
 `boot.img`，再按选择刷对应的 `init_boot_*.img`，最后询问/选择是否刷 TWRP。
 
+ROOT 管理器 apk（Magisk / KernelSU / SukiSU / KernelSU-Next / Kitsune Mask / APatch /
+FolkPatch）会从 `root_manager_dir` 复制进 zip 的 `RootManager/`，和参考成品包一致：
+
+```ini
+[packing]
+; 缺省 assets/root_images/RootManager；目录不存在就跳过（不影响出包）
+; apk 是第三方产物、约 100 MiB，默认不入库，需要时自行放进去
+root_manager_dir=assets/root_images/RootManager
+```
+
 换自己的 recovery / ROOT 补丁：
 
 ```ini
@@ -426,9 +436,11 @@ shennong-port/
 * **版本跨度**：Android 17 → 16，`sync_apex` 会把底包 VNDK 同步进移植包，
   但框架/HAL 差得太远时仍可能卡开机；首选更早的源包或更新的底包，详见
   [docs/PORT_NEZHA_TO_14PRO.md](docs/PORT_NEZHA_TO_14PRO.md)。
-* **磁盘**：两套包解压后非常占空间。默认 `cleanup_intermediate=true`、
+* **内存 / 磁盘**：两套包解压后非常占空间。默认 `cleanup_intermediate=true`、
   `keep_super_img=false`；仍不够时按提示删 `workspace/download_*`、
-  `workspace/source_rom`、`workspace/target_rom`。
+  `workspace/source_rom`、`workspace/target_rom`。16 GiB 内存机器上
+  `lz4hc` 打包偶尔会被 OOM 打断（`[X] system 打包失败`），重跑 `--stage pack` 即可，
+  或把 `compression` 换成 `zstd`、`compression_level` 降到 9。
 * **目标代号校验**：`strict_target=true` 会在下载前检查 target URL 的代号是否为
   `shennong`，避免拿错底包。
 * **未在真机验证**：本仓库只做了静态审查、语法自检、合成数据端到端测试和工具链实跑；

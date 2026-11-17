@@ -3,6 +3,37 @@
 本项目遵循「一条路线一版」的节奏：换源机型 / 换底包 / 换 super 布局都算一个版本。
 日期格式 `YYYY-MM-DD`。
 
+## v0.4.1 — 2026-11-17
+
+**跑通一次真实移植，并按实测结果修掉两个打包缺陷。**
+
+### 修复
+
+* **基线比对时机**：`package_zip` 压缩完 super 后（`keep_super_img=false`）会删掉
+  raw `super.img`，原先 Step 7.9 放在出 zip 之后 → 必然报「找不到 super.img」。
+  现在改到 zip 之前，实测能跑出 15 ok / 2 warn / 0 fail。
+* **ROOT 管理器缺失**：参考成品包带 `RootManager/`（Magisk / KernelSU / SukiSU /
+  KernelSU-Next / Kitsune Mask / APatch / FolkPatch），本项目的 zip 只有
+  `init_boot_*.img`，选了 ROOT 却没有管理器可装。新增 `_stage_root_managers()`，
+  从 `root_manager_dir`（默认 `assets/root_images/RootManager`）复制 apk 入包；
+  apk 是第三方产物（~100 MiB），已 gitignore，不入库。
+
+### 实测（详见 docs/PORT_NEZHA_TO_14PRO.md §8）
+
+* 源包 `OS4.0.7.0.XPACNXM`（10.5 GB）+ 底包 `OS3.0.310.0.WNBCNXM`（6.2 GB）；
+  下载约 79 分钟，其余阶段约 28 分钟；
+* super.img = 8 321 499 136 B，metadata v10.2 / 3 slots / `virtual_ab_device`，
+  8 个 `_a` 分区、单 group，合计 6.97 GiB（余 796 MiB）；
+* 卡刷包 5.92 GiB（77 文件 / 10 目录），含 32 个固件镜像 + 6 种 `init_boot` +
+  TWRP + `RootManager/`（7 个管理器 apk）；
+* 基线比对 **15 ok / 2 warn / 0 fail**（warn = product/system_ext 被精简）。
+
+### 已知坑
+
+* `mkfs.erofs` 偶发失败：16 GiB 内存机器在 `lz4hc,9` 打 system 时可能被 OOM 打断，
+  表现为 `[X] system 打包失败`。此时 Step 7.9 会报 `缺少分区 system_a` 并让退出码为 1，
+  重跑 `--stage pack` 即可；长期方案是 `compression=zstd` / 降 `compression_level`。
+
 ## v0.4.0 — 2026-11-17
 
 **主路线切换到 小米 17 Ultra（`nezha`）→ 小米 14 Pro（`shennong`），并把「完美包」变成可执行的基线。**

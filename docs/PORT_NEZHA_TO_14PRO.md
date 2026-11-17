@@ -163,6 +163,12 @@ python tools\ref_check.py package workspace\output\shennong_unpacked
 * 8 个 `_a` 分区是否齐全、每个分区的字节数与基线的偏差、**不允许出现 `_b`**；
 * 卡刷包里的机型代号 / 机型名 / 底包版本是否与基线一致。
 
+> **它真的拦住过一次**：第二次出包时 `mkfs.erofs` 偶发失败（页面文件吃紧，
+> 16 GiB 内存机器上 `-zlz4hc,9` 打 system 时最容易撞），`system_a` 没进 super，
+> 比对立刻报 `[FAIL] 缺少分区 system_a` 并让整体退出码变成 1 —— 而不是默默产出一个
+> 开不了机的 zip。重跑一次 `--stage pack` 即恢复。
+> 内存吃紧时把 `[packing] compression=zstd`、`compression_level=9` 更稳。
+
 ---
 
 ## 6. 刷写顺序（照参考包实测的顺序）
@@ -203,3 +209,34 @@ TWRP 侧还会**先用文件名里的 MD5 前 10 位校验整个 zip**，不匹�
 
 两条路线共用同一套流水线；`tools/device_profiles.py` 的 `ROUTES` 表记录状态，
 `--selftest` 会打印当前是哪条路线、有没有基线。
+
+---
+
+## 8. 实测记录（本仓库跑出来的一次真实产物）
+
+| 项 | 实测值 |
+| --- | --- |
+| 源包 | `nezha-ota_full-OS4.0.7.0.XPACNXM-user-17.0-5d0985edfa.zip`（10 513 696 443 B） |
+| 底包 | `shennong-ota_full-OS3.0.310.0.WNBCNXM-user-16.0-9a177484fc.zip`（6.16 GiB） |
+| 下载 | 16 GB，CDN 约 3.5–5 MB/s，**约 79 分钟** |
+| 解包 → 迁移 → 精简 → 打包 → 压缩 → 出 zip | **约 28 分钟**（16 核 / NVMe） |
+| super.img | **8 321 499 136 B**（与参考包同尺寸） |
+| metadata | v10.2 / slots 3 / 65536 / lbs 4096 / `virtual_ab_device` ✔ |
+| 分区 | 8 个 `_a`，单 group `qti_dynamic_partitions_a`，合计 6.97 GiB，余量 796 MiB |
+| 与基线比对 | **15 ok / 2 warn / 0 fail**（warn 是 product / system_ext 被精简，属预期） |
+| 产物 | `ShennongPort_Mi14Pro_OS4.0.7.0.XPACNXM_nezha_<md5>_17.zip`，**5.83 GiB** |
+| 包内 | `images/super.img.zst`（59.2 亿字节）+ 32 个固件镜像 + 6 种 `init_boot` + TWRP + `RootManager/` + `update-binary` + `Flash-Windows.bat` + `NOTICE/` |
+
+各分区与基线的偏差（本仓库产物 vs Rom6）：
+
+| 分区 | 本仓库 | Rom6 基线 | 差 |
+| --- | --- | --- | --- |
+| `system_a` | 919.28 MiB | 909.25 MiB | +10.0 MiB |
+| `system_ext_a` | 763.98 MiB | 869.92 MiB | −106 MiB（精简） |
+| `product_a` | 2661.06 MiB | 2965.79 MiB | −305 MiB（精简） |
+| `odm_a` | 2.15 GiB | 2.15 GiB | ≈ 0（底包沿用） |
+| `vendor_a` | 447.75 MiB | 447.30 MiB | +0.4 MiB（打补丁后重打包） |
+| `mi_ext_a` / `*_dlkm_a` | 102.86 / 43.6 MiB | 101.24 / 43.6 MiB | ≈ 0 |
+
+> 结论：布局与参考包逐项一致（容量/metadata/flags/组/命名全 OK），差异只在
+> 「精简了多少」，而且比参考包多了近 400 MiB 余量。
