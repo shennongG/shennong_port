@@ -5,10 +5,15 @@
 ![](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4)
 ![](https://img.shields.io/badge/python-3.8%2B-3776ab)
 
-**小米 18 Pro Max（`madrid`）→ 小米 14 Pro（`shennong`）移植流水线：移植 → 精简 → 打包。**
+**小米 17 Ultra（`nezha`）→ 小米 14 Pro（`shennong`）移植流水线：移植 → 精简 → 打包 → 基线自检。**
 
 一条命令把「双包下载 / 解包 / 分区迁移 / 精简 / 功能修补 / super 合成 / 卡刷包」
 串起来，产物是能直接进 TWRP 的 zip。仓库只放代码与工具链，ROM 与专属资源不入库。
+
+| 路线 | 源 | 目标底包 | 状态 |
+| --- | --- | --- | --- |
+| **主路线** | Xiaomi 17 Ultra `nezha`（OS4.0.7.0.XPACNXM / Android 17） | 14 Pro `shennong`（OS3.0.310.0.WNBCNXM / Android 16） | ✅ 有成品包基线（Rom6），见 [docs/PORT_NEZHA_TO_14PRO.md](docs/PORT_NEZHA_TO_14PRO.md) |
+| 备选 | Xiaomi 18 Pro Max `madrid`（OS4.0.27.0.XEOCNXM / Android 17） | 同上 | 可跑通流水线，未实机验证，见 [docs/PORT_18PROMAX_TO_14PRO.md](docs/PORT_18PROMAX_TO_14PRO.md) |
 
 ```
 ┌──────────────┐   ┌───────────────────────────┐   ┌──────────────────────┐
@@ -23,13 +28,19 @@
 
 | 阶段 | 输入 | 产出 |
 | --- | --- | --- |
-| port | 源包（18 Pro Max OTA）、底包（14 Pro OTA） | `workspace/source_filesystem`、`target_filesystem` |
+| port | 源包（17 Ultra OTA）、底包（14 Pro OTA） | `workspace/source_filesystem`、`target_filesystem` |
 | slim | 上一步的文件系统 | 精简 + 修补后的 system / system_ext / product / vendor |
 | pack | 精简结果 + 固件镜像 | `workspace/packed/super.img`、`workspace/output/*.zip` |
 
-> 方向固定：**源 = 18 Pro Max（HyperOS 4 / Android 17）**，
+> 默认方向：**源 = 17 Ultra（HyperOS 4 / Android 17）**，
 > **目标 = 14 Pro 底包（HyperOS 3 / Android 16）**。体积、super 布局、
-> 版本跨度与刷写注意事项见 [docs/PORT_18PROMAX_TO_14PRO.md](docs/PORT_18PROMAX_TO_14PRO.md)。
+> 版本跨度与刷写注意事项见 [docs/PORT_NEZHA_TO_14PRO.md](docs/PORT_NEZHA_TO_14PRO.md)，
+> 字节级分区表见 [docs/PARTITION_MAP.md](docs/PARTITION_MAP.md)。
+
+> **「对齐参考包」是可执行的**：`reference/rom6_reference.json` 记录了一个
+> 已实机刷开机的成品包（17 Ultra → 14 Pro）的 super 布局与版本信息，
+> 打包完会自动比对（`verify_after_pack`），也可以随时手工跑
+> `python tools\ref_check.py package <包目录>`。
 
 ---
 
@@ -37,20 +48,24 @@
 
 ```bat
 :: 0) 环境：Python 3.8+（建议 3.12），约 40 GB 磁盘
-git clone https://gitee.com/h-shennong/shennong-port.git
-cd shennong-port
+git clone https://github.com/long969697262/shennong_port.git
+cd shennong_port
+::    Gitee 镜像：git clone https://gitee.com/h-shennong/XMAPort-SHALLOW.git
 
-:: 1) 自检：工具链 / 模块 / 配置 / 资源镜像链，应该全 [OK]
+:: 1) 自检：工具链 / 模块 / 配置 / 路线 / 基线，应该全 [OK]
 python shennong_port.py --selftest
 
 :: 2) 拉取 14 Pro 专属资源（约 310 MiB，只需一次；自动挑可用镜像）
 python tools\assets.py fetch
 
 :: 3) 检查目标配置
-notepad config.ini        :: device_platform / device_size / 两个 ROM 直链
+notepad config.ini        :: device_platform / device_size / 两个 ROM 直链 / verify_after_pack
 
-:: 4) 全流程：移植 → 精简 → 打包
+:: 4) 全流程：移植 → 精简 → 打包（末尾自动与参考基线比对）
 python shennong_port.py --auto --device shennong
+
+:: 5) 只做基线比对（默认比 workspace\packed\super.img）
+python shennong_port.py --verify
 ```
 
 > 国内网络先看一眼镜像链，哪条通心里有数：
@@ -151,8 +166,9 @@ python shennong_port.py --auto --device shennong --stage pack   :: 只打包 + �
 
 预算不够时再按顺序追加通用档位：
 `media` → `audio` → `preinstall` → `apps` → `ai` → `theme` → `custom`
-（`slim_tiers` / `auto_fit_tiers` 可调）。18 Pro Max 这种大包通常还需要
-`ai`（AI 模型）甚至 `theme`（主题素材）才装得下 7.75 GiB，代价是对应功能/主题失效。
+（`slim_tiers` / `auto_fit_tiers` 可调）。17 Ultra 的 `product` 约 2.90 GiB（参考包实测），
+是主要体积压力；18 Pro Max 这种更大的包通常还要 `ai`（AI 模型）甚至 `theme`（主题素材）
+才装得下 7.75 GiB，代价是对应功能/主题失效。
 
 ### 3.2 14 Pro 功能修补（`tools/shennong_patch.py`）
 
@@ -240,6 +256,37 @@ asset_mirrors=https://ghfast.top/,https://gh-proxy.com/
 > `--disable-verity --disable-verification`，并在最后 `set_active a` + `reboot`。
 > 旧包如果卡第一屏，先用这一版重打包再刷。
 
+### 4.1 参考基线比对（借鉴 Rom6 完美包）
+
+参考包（`X-MiPort_Mi14Pro_OS4.0.7.0.XPACNXM_nezha_*.zip`）是**实机刷开过机**的
+17 Ultra → 14 Pro 成品包。本项目把它解析成基线
+[reference/rom6_reference.json](reference/rom6_reference.json)，用
+[tools/ref_check.py](tools/ref_check.py) 做两件事：
+
+| 能力 | 命令 | 说明 |
+| --- | --- | --- |
+| 读 super 布局 | `python tools\ref_check.py super workspace\packed\super.img` | **纯标准库**解析 liblp（不依赖 lpdumps.exe），列出分区/字节数/组/flags |
+| 审计卡刷包 | `python tools\ref_check.py package D:\Rom6` | 镜像齐不齐、版本号对不对、布局是否与基线一致 |
+| 生成/刷新基线 | `python tools\ref_check.py emit D:\Rom6 --emit reference\rom6_reference.json` | 换路线或换底包后重做 |
+| 跑全流程后自检 | `python shennong_port.py --verify` | 等价于 `--stage pack` 末尾那一步 |
+
+比对内容与判定：
+
+* `fail`（会中断 `verify_after_pack=strict` 的构建）：super 超过基线容量、
+  `block device super` 大小不符、metadata 版本/槽位/flags 不符、分区组不符、
+  缺分区、单分区明显超基线、**出现 `_b` 分区**、卡刷包机型代号不是 `shennong`；
+* `warn`：比基线小超过容忍值、多出基线里没有的分区/组、底包版本或来源机型变了；
+* 宽容值：`verify_tolerance_mib=64`（精简与压缩算法差异带来的抖动）。
+
+```ini
+[packing]
+; true=只提示 / strict=有 fail 就判构建失败（CI 推荐）/ false=不跑
+verify_after_pack=true
+reference=reference/rom6_reference.json
+expect_donor=nezha
+verify_tolerance_mib=64
+```
+
 ### Recovery 与 ROOT 补丁
 
 仓库里带了一套 14 Pro 可用的补丁（`assets/root_images/`）：
@@ -322,21 +369,24 @@ powershell -File ci\release.ps1 -Action list
 
 ```
 shennong-port/
-├─ shennong_port.py           入口：Step 1-8 编排 + CLI + 自检
-├─ config.ini                 合并配置（移植/精简/打包三段 + 资源镜像）
+├─ shennong_port.py           入口：Step 1-8 编排 + CLI + 自检 + 基线比对
+├─ config.ini                 合并配置（移植/精简/打包三段 + 资源镜像 + 基线）
 ├─ NOTICE.md                  第三方组件、许可证、商标与免责声明（唯一声明入口）
 ├─ licenses/                  随包组件的许可证正文
+├─ reference/
+│  └─ rom6_reference.json     17 Ultra → 14 Pro 完美包（Rom6）的 super/版本基线
 ├─ tools/
 │  ├─ make_hyper.py           移植核心（分区迁移 / super 合成）
 │  ├─ pack_partitions.py      erofs/ext4 打包
 │  ├─ extract_img.py          镜像解包
 │  ├─ slim.py                 14 Pro 应用清单 + 通用档位
 │  ├─ shennong_patch.py       功能修补
+│  ├─ ref_check.py            liblp 解析 + 卡刷包审计 + 基线比对（纯标准库）
 │  ├─ assets.py               资源下载 / 校验 / 镜像链
 │  ├─ gitee_release.py        Gitee Release 发布
 │  ├─ gitee_repo.py           Gitee 建仓 / 查仓
 │  ├─ stage_common.py         路径/配置/体积公共设施
-│  ├─ device_profiles.py      shennong / madrid 档案（预算上限）
+│  ├─ device_profiles.py      shennong / nezha / madrid 档案 + ROUTES 路线表
 │  ├─ package_zip.py          super.zst + 卡刷包
 │  ├─ apktool.jar / jre/      签名补丁用的工具链
 │  ├─ recovery_bin/7zzs       Recovery 侧解压器
@@ -348,10 +398,13 @@ shennong-port/
 │  └─ gitee-go.yml            Gitee Go 流水线模板
 ├─ tests/
 │  ├─ test_stages.py          无 ROM 回归测试（合成数据）
+│  ├─ test_ref_check.py       liblp 解析 / 基线比对回归测试
 │  ├─ test_payload_args.py    payload 参数测试
 │  └─ make_fixture.py         生成合成工作区
 └─ docs/
-   ├─ PORT_18PROMAX_TO_14PRO.md  机型适配说明（预算/版本/刷写）
+   ├─ PORT_NEZHA_TO_14PRO.md     主路线：17 Ultra → 14 Pro（含 Rom6 证据链）
+   ├─ PARTITION_MAP.md           基线分区表（字节级，可复算）
+   ├─ PORT_18PROMAX_TO_14PRO.md  备选路线：18 Pro Max → 14 Pro
    ├─ ARCHITECTURE.md         流水线设计 / 数据流
    ├─ USAGE.md                详细用法 + 排错
    ├─ STEPS.md                实现步骤与行为规格对照
@@ -371,14 +424,15 @@ shennong-port/
 * **图标包**是可选步骤（`enable_icons=true`），需要联网下载（走镜像链）。
 * **版本跨度**：Android 17 → 16，`sync_apex` 会把底包 VNDK 同步进移植包，
   但框架/HAL 差得太远时仍可能卡开机；首选更早的源包或更新的底包，详见
-  [docs/PORT_18PROMAX_TO_14PRO.md](docs/PORT_18PROMAX_TO_14PRO.md)。
+  [docs/PORT_NEZHA_TO_14PRO.md](docs/PORT_NEZHA_TO_14PRO.md)。
 * **磁盘**：两套包解压后非常占空间。默认 `cleanup_intermediate=true`、
   `keep_super_img=false`；仍不够时按提示删 `workspace/download_*`、
   `workspace/source_rom`、`workspace/target_rom`。
 * **目标代号校验**：`strict_target=true` 会在下载前检查 target URL 的代号是否为
   `shennong`，避免拿错底包。
 * **未在真机验证**：本仓库只做了静态审查、语法自检、合成数据端到端测试和工具链实跑；
-  刷机风险自负。
+  刷机风险自负。**例外**：`reference/rom6_reference.json` 对应成品包是实机刷开过机的，
+  但它验证的是「移植结果能开机」，不是「本仓库每个参数都最优」。
 
 ---
 
@@ -386,14 +440,19 @@ shennong-port/
 
 ```bat
 python tests\test_stages.py        :: 精简/修补单元回归（合成数据 + 假资源）
+python tests\test_ref_check.py     :: liblp 解析 / 基线比对回归（合成 super + 真实包）
 python tests\test_payload_args.py  :: payload 分区过滤/并发/超时 参数测试
 python tests\make_fixture.py       :: 生成合成工作区
 python shennong_port.py --auto --stage slim --device shennong --offline
 python shennong_port.py --auto --stage pack --device shennong
+python shennong_port.py --verify   :: 只比对 workspace\packed\super.img 与基线
 ```
 
 `test_stages.py` 覆盖 5 组删除清单、保护名单、资源替换步骤、build.prop 统一和
-vendor 侧修补；`make_fixture.py` 用来手动验证「精简 → 打包 → 出 zip」全链路，
+vendor 侧修补；`test_ref_check.py` 覆盖 liblp 解析（含描述符基址 +80、magic 在
+12288 的厂商布局）、缺分区/超预算/多出 `_b` 的判定、混排编码脚本解析，
+以及在 `XMAPORT_REF_PACKAGE`（默认 `D:\Rom6`）存在时对真实成品包的端到端比对；
+`make_fixture.py` 用来手动验证「精简 → 打包 → 出 zip」全链路，
 包括 split_ab 的 lpmake 参数与 auto-fit 重打包。
 
 ---

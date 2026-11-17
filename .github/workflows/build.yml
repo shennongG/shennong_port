@@ -13,7 +13,7 @@ on:
         required: true
         default: "shennong"
       source:
-        description: "源 ROM 直链（留空用 config.ini）"
+        description: "源 ROM 直链（留空用 config.ini，默认 17 Ultra / nezha）"
         required: false
         default: ""
       target:
@@ -68,6 +68,10 @@ jobs:
         shell: pwsh
         run: python shennong_port.py --selftest
 
+      - name: Unit tests (no ROM needed)
+        shell: pwsh
+        run: python -m unittest discover -s tests -v
+
       - name: Cache shennong_files
         uses: actions/cache@v4
         with:
@@ -102,6 +106,17 @@ jobs:
         run: |
           Get-ChildItem workspace\output -ErrorAction SilentlyContinue | Format-Table Name, Length
           Get-ChildItem workspace\packed -ErrorAction SilentlyContinue | Format-Table Name, Length
+
+      - name: Verify against reference baseline
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path workspace\packed\super.img) {
+            python tools\ref_check.py super workspace\packed\super.img --no-color
+            Write-Host "ref_check exit=$LASTEXITCODE (0=与基线一致, 1=有差异)"
+          } else {
+            Write-Host "super.img 已被清理（keep_super_img=false），基线比对已在流水线 Step 7.9 内完成"
+          }
 
       - name: Split flashable zip (1900 MiB volumes)
         if: success() && inputs.stage != 'port' && inputs.stage != 'slim'
@@ -140,9 +155,10 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release | Out-Null
-          Copy-Item shennong_port.py, config.ini, LICENSE, README.md release\
+          Copy-Item shennong_port.py, config.ini, LICENSE, README.md, CHANGELOG.md, NOTICE.md release\
           Copy-Item -Recurse tools release\tools
           Copy-Item -Recurse docs release\docs
+          Copy-Item -Recurse reference release\reference
           Compress-Archive -Path release\* -DestinationPath ShennongPort-win64.zip
 
       - name: Upload source package

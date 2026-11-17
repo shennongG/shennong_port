@@ -415,6 +415,11 @@ def read_packing_config():
         "payload_concurrency": "8",   # payload-dumper-go 并发
         "payload_parts_source": "system,system_ext,product",
         "payload_parts_target": "",   # 空 = 全部（固件镜像也要）
+        # ---- 参考基线（完美包比对 / super 布局审计）----
+        "verify_after_pack": "true",  # true=只提示 / strict=比对失败即判失败 / false=不跑
+        "reference": "reference/rom6_reference.json",
+        "expect_donor": "nezha",      # 移植源代号，出包时核对
+        "verify_tolerance_mib": "64",
     }
     if CONFIG.exists():
         for raw in CONFIG.read_text(encoding="gbk", errors="ignore").splitlines():
@@ -1408,6 +1413,71 @@ def _abort_port(auto, msg):
     raise ReturnToMenu()
 
 
+# ---------------- 参考基线比对（借鉴完美包，把「对齐」变成可执行的检查） ----------------
+REF_CHECK = TOOLS / "ref_check.py"
+
+
+def verify_build(pack_cfg, strict=False, target=None):
+    """用 tools/ref_check.py 把打包结果与参考基线比一遍。
+
+    返回 (rc, counts)：rc 0=一致，1=有差异，2=环境/参数问题（基线缺失等）。
+    """
+    ref = str(pack_cfg.get("reference", "") or "").strip()
+    ref_path = (ROOT / ref) if ref else None
+    if not ref_path or not ref_path.is_file():
+        info("参考基线不存在（{}），跳过比对".format(ref or "reference"))
+        log_write("WARNING: reference baseline missing, verify skipped")
+        return 2, {}
+    if not REF_CHECK.is_file():
+        info("tools/ref_check.py 不存在，跳过比对")
+        return 2, {}
+
+    sup = Path(target) if target else (PACK_OUT / "super.img")
+    if not sup.is_file():
+        err("找不到待比对的 super.img：{}".format(sup))
+        log_write("WARNING: super.img missing, verify skipped")
+        return 2, {}
+
+    cmd = [PY, str(REF_CHECK), "super", str(sup),
+           "--ref", str(ref_path),
+           "--tolerance-mib", str(pack_cfg.get("verify_tolerance_mib", "64")),
+           "--no-color"]
+    info("=== 参考基线比对（{}）===".format(ref_path.name))
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"      # ref_check 输出是 UTF-8，避免 cp936 乱码
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace",
+                              env=env, timeout=TOOL_TIMEOUT)
+    except Exception as exc:                          # noqa: BLE001
+        log_write("WARNING: ref_check failed to run: {}".format(exc))
+        return 2, {}
+    out = (proc.stdout or "") + (proc.stderr or "")
+    for line in out.splitlines():
+        if line.strip():
+            print("  " + line.rstrip())
+    log_write("ref_check rc={}\n{}".format(proc.returncode, out.strip()))
+
+    counts = {}
+    for word in ("ok", "warn", "fail"):
+        m = re.search(r"(\d+)\s+" + word + r"\b", out)
+        if m:
+            counts[word] = int(m.group(1))
+    if proc.returncode == 0:
+        info("基线与本次构建一致：{} ok / {} warn".format(
+            counts.get("ok", 0), counts.get("warn", 0)))
+    else:
+        msg = "与参考基线存在差异（{} fail）；细节见上方清单，或 " \
+              "python tools\\ref_check.py super workspace\\packed\\super.img".format(
+                  counts.get("fail", "?"))
+        if strict:
+            err(msg)
+        else:
+            print("  {}[!] {}{}".format(Y, msg, N))
+        log_write("WARNING: reference mismatch: {}".format(msg))
+    return proc.returncode, counts
+
+
 # ---------------- Step 7 打包（从原 Step 6/7 平移，便于单独重跑） ----------------
 def stage_pack(pack_cfg, auto=False, offline=False):
     if not (SRC_FS / "system").is_dir():
@@ -1619,6 +1689,15 @@ def stage_pack(pack_cfg, auto=False, offline=False):
             port_failed = True
             err("zip packaging failed: {}".format(zsum.get("error", "")))
             log_write("ERROR: zip packaging failed: {}".format(zsum.get("error", "")))
+
+    # ---------------- Step 7.9: 参考基线比对 ----------------
+    verify_mode = str(pack_cfg.get("verify_after_pack", "true")).strip().lower()
+    verify_rc, verify_counts = 2, {}
+    if verify_mode not in ("false", "0", "no", "off", ""):
+        verify_rc, verify_counts = verify_build(
+            pack_cfg, strict=(verify_mode == "strict"))
+        if verify_mode == "strict" and verify_rc == 1:
+            port_failed = True
 
     # ---------------- Step 8: 汇总 ----------------
     port_ok = ((not port_failed) and counters["pack_fail"] == 0
@@ -2191,6 +2270,10 @@ def parse_args():
                         help="跳过精简阶段，直接打包（调试用）")
     parser.add_argument("--selftest", action="store_true",
                         help="只做环境自检，不动任何数据")
+    parser.add_argument("--verify", action="store_true",
+                        help="只跑参考基线比对（默认比 workspace/packed/super.img）")
+    parser.add_argument("--verify-path", default="",
+                        help="--verify 的比对对象：super.img 或解压后的卡刷包目录")
     parser.add_argument("-y", "--yes", action="store_true",
                         help="Skip confirmation prompts")
     return parser.parse_args()
@@ -2235,6 +2318,7 @@ def selftest():
         ("tools/zstd.exe", TOOLS / "zstd.exe"),
         ("tools/flashtools.zip", TOOLS / "flashtools.zip"),
         ("移植核心: make_hyper.py", TOOLS / "make_hyper.py"),
+        ("基线比对: ref_check.py", TOOLS / "ref_check.py"),
         ("config.ini", CONFIG),
     ]
     for label, p in checks:
@@ -2287,7 +2371,32 @@ def selftest():
                 if (src_ver.isdigit() and tgt_ver.isdigit()
                         and int(src_ver) > int(tgt_ver)):
                     print("  [!] Android 跨度 {} -> {}：会跑 VNDK/APEX 同步，"
-                          "见 docs/PORT_18PROMAX_TO_14PRO.md".format(src_ver, tgt_ver))
+                          "见 docs/PORT_NEZHA_TO_14PRO.md".format(src_ver, tgt_ver))
+                try:
+                    _, route = device_profiles.get_route(src_dev, tgt_dev)
+                except Exception:
+                    route = None
+                if route:
+                    print("  路线            = {} -> {} [{}]  {}".format(
+                        src_dev, tgt_dev, route.get("status"),
+                        route.get("reference") or ""))
+                elif src_dev and tgt_dev:
+                    print("  [!] 路线 {} -> {} 未登记（tools/device_profiles.py ROUTES）"
+                          .format(src_dev, tgt_dev))
+                ref_rel = str(read_packing_config().get("reference", "") or "")
+                ref_p = ROOT / ref_rel if ref_rel else None
+                if ref_p and ref_p.is_file():
+                    try:
+                        import json as _json
+                        base = _json.loads(ref_p.read_text(encoding="utf-8"))
+                        bsup = base.get("super") or {}
+                        print("  参考基线        = {} ({} 个分区, super {})".format(
+                            ref_rel, len(bsup.get("partitions") or []),
+                            scommon.human(bsup.get("file_size") or 0)))
+                    except Exception:
+                        print("  参考基线        = {} (读取失败)".format(ref_rel))
+                else:
+                    print("  参考基线        = 缺失（{}）".format(ref_rel or "未配置"))
                 b = resolve_super_budget(read_packing_config(), verbose=False)
                 print("  super budget    = {} (usable {})".format(
                     scommon.human(b["budget"]), scommon.human(b["usable"])))
@@ -2331,6 +2440,19 @@ def main():
 
     if args.selftest:
         sys.exit(selftest())
+
+    if args.verify:
+        cfg = read_packing_config()
+        target = args.verify_path.strip()
+        ref = str(cfg.get("reference", "") or "").strip()
+        if target and Path(target).is_dir():
+            cmd = [PY, str(REF_CHECK), "package", target, "--no-color"]
+            if ref:
+                cmd += ["--ref", str(ROOT / ref)]
+            rc = run_tool(cmd, timeout=TOOL_TIMEOUT).returncode
+            sys.exit(0 if rc == 0 else 1)
+        rc, _ = verify_build(cfg, strict=True, target=target or None)
+        sys.exit({0: 0, 2: 2}.get(rc, 1))
 
     for d in ALL_DIRS:
         d.mkdir(parents=True, exist_ok=True)

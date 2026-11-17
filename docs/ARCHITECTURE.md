@@ -34,6 +34,10 @@
         │ Step 7  pack + zip          │  erofs + lpmake + zstd + 7z
         └─────────────┬──────────────┘
                       │
+        ┌─────────────▼──────────────┐
+        │ Step 7.9  baseline verify   │  tools/ref_check.py 对比 reference/rom6_reference.json
+        └─────────────┬──────────────┘
+                      │
         workspace/packed/*.img  super.img
         workspace/output/SHENNONG_ShalloW_*.zip
 ```
@@ -61,7 +65,9 @@ budget = min(config.device_size, 底包 dynamic_partitions_info.txt 的 super_pa
 usable = budget - metadata_size × metadata_slots - margin
 ```
 
-默认 `budget = 8 321 499 136`（7.75 GiB），`metadata 65536 × 3`，`margin 64 MiB`。
+默认 `budget = 8 321 499 136`（7.75 GiB），`metadata 65536 × 3`，`margin 64 MiB`；
+这个值同时写在 `reference/rom6_reference.json` 的 `budget` 字段里（来自实测成品包），
+所以 `--selftest` 与 `--verify` 都能独立复核，不依赖记忆。
 
 打包分两步收敛：
 
@@ -85,6 +91,8 @@ super 布局由 `super_style` 决定：
 | `slim.py` | `workspace/source_filesystem` | 删除后的目录树 + `slim_state.json` | 只读 config |
 | `shennong_patch.py` | 源/目标文件系统 + `assets/shennong_files` | 修补后的目录树 + `shennong_patch.json` | `assets.py` |
 | `package_zip.py` | `workspace/packed/super.img` + `target_payload` | `workspace/output/*.zip` | `7z.exe` / `zstd.exe` |
+| `ref_check.py` | `super.img` / 卡刷包目录 + `reference/*.json` | 分区表 + findings（ok/warn/fail） | 纯标准库 |
+| `device_profiles.py` | — | 目标/源档案 + `ROUTES` 路线状态 | 无 |
 | `stage_common.py` | — | 路径 / 配置 / 体积 / 安全删除 | 无 |
 
 三个模块都能单独 CLI 运行，便于排错：
@@ -95,6 +103,8 @@ python tools\slim.py apply --tier media --dry-run
 python tools\shennong_patch.py list
 python tools\shennong_patch.py apply --dry-run --offline
 python tools\package_zip.py --dry-run
+python tools\ref_check.py super workspace\packed\super.img
+python tools\ref_check.py package D:\Rom6
 ```
 
 ## 5. 失败策略
@@ -106,6 +116,7 @@ python tools\package_zip.py --dry-run
 | 修补步骤 | 缺资源的步骤 `skip`；抛异常的步骤 `fail`，打包仍继续（结果里可见） |
 | 分区打包 | 统计 `pack_fail`，汇总标红 |
 | super / zip | `super_rc != 0` 或 zip 失败 → 整体退出码 1 |
+| 基线比对 | `verify_after_pack=true` 只提示；`=strict` 且有 `fail` → 整体退出码 1 |
 
 日志：`workspace/<日期>-<小时>.log`；另有 `slim_state.json`、`shennong_patch.json`、
 `output/*.json` 三份结构化记录。

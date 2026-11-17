@@ -1,0 +1,359 @@
+{
+  "schema": 1,
+  "generated_from": "D:\\Rom6",
+  "versions": {
+    "device_code": "SHENNONG",
+    "device_name": "Xiaomi 14 Pro",
+    "base_version": "OS3.0.310.0.WNBCNXM",
+    "donor_name": "Xiaomi 17 Ultra",
+    "donor_version": "OS4.0.7.0.XPACNXM",
+    "android": "17",
+    "data_state": "DataDecryption",
+    "version_tags": [
+      "OS3.0.310.0.WNBCNXM",
+      "OS4.0.7.0.XPACNXM"
+    ]
+  },
+  "flash_package": {
+    "images": [
+      {
+        "name": "abl.img",
+        "size": 307200,
+        "compressed": false
+      },
+      {
+        "name": "aop.img",
+        "size": 335872,
+        "compressed": false
+      },
+      {
+        "name": "aop_config.img",
+        "size": 28672,
+        "compressed": false
+      },
+      {
+        "name": "bluetooth.img",
+        "size": 1470464,
+        "compressed": false
+      },
+      {
+        "name": "boot.img",
+        "size": 100663296,
+        "compressed": false
+      },
+      {
+        "name": "boot_apatch.img",
+        "size": 100663296,
+        "compressed": false
+      },
+      {
+        "name": "boot_folkpatch.img",
+        "size": 100663296,
+        "compressed": false
+      },
+      {
+        "name": "cpucp.img",
+        "size": 253952,
+        "compressed": false
+      },
+      {
+        "name": "cpucp_dtb.img",
+        "size": 16384,
+        "compressed": false
+      },
+      {
+        "name": "devcfg.img",
+        "size": 61440,
+        "compressed": false
+      },
+      {
+        "name": "dsp.img",
+        "size": 67108864,
+        "compressed": false
+      },
+      {
+        "name": "dtbo.img",
+        "size": 20971520,
+        "compressed": false
+      },
+      {
+        "name": "featenabler.img",
+        "size": 106496,
+        "compressed": false
+      },
+      {
+        "name": "hyp.img",
+        "size": 1511424,
+        "compressed": false
+      },
+      {
+        "name": "imagefv.img",
+        "size": 6299648,
+        "compressed": false
+      },
+      {
+        "name": "init_boot_kitsune-mask.img",
+        "size": 8388608,
+        "compressed": false
+      },
+      {
+        "name": "init_boot_ksu-next.img",
+        "size": 8388608,
+        "compressed": false
+      },
+      {
+        "name": "init_boot_ksu.img",
+        "size": 8388608,
+        "compressed": false
+      },
+      {
+        "name": "init_boot_magisk.img",
+        "size": 8388608,
+        "compressed": false
+      },
+      {
+        "name": "init_boot_official.img",
+        "size": 8388608,
+        "compressed": false
+      },
+      {
+        "name": "init_boot_sukisu.img",
+        "size": 8388608,
+        "compressed": false
+      },
+      {
+        "name": "keymaster.img",
+        "size": 442368,
+        "compressed": false
+      },
+      {
+        "name": "mi_ext_file_contexts",
+        "size": 10585,
+        "compressed": false
+      },
+      {
+        "name": "mi_ext_fs_config",
+        "size": 7812,
+        "compressed": false
+      },
+      {
+        "name": "modem.img",
+        "size": 130019328,
+        "compressed": false
+      },
+      {
+        "name": "modemfirmware.img",
+        "size": 237260800,
+        "compressed": false
+      },
+      {
+        "name": "multiimgqti.img",
+        "size": 12288,
+        "compressed": false
+      },
+      {
+        "name": "qupfw.img",
+        "size": 61440,
+        "compressed": false
+      },
+      {
+        "name": "recovery.img",
+        "size": 104857600,
+        "compressed": false
+      },
+      {
+        "name": "recovery_twrp.img",
+        "size": 104857600,
+        "compressed": false
+      },
+      {
+        "name": "shrm.img",
+        "size": 139264,
+        "compressed": false
+      },
+      {
+        "name": "spuservice.img",
+        "size": 98304,
+        "compressed": false
+      },
+      {
+        "name": "super.img",
+        "size": 8321499136,
+        "compressed": false
+      },
+      {
+        "name": "tz.img",
+        "size": 4141056,
+        "compressed": false
+      },
+      {
+        "name": "uefi.img",
+        "size": 2949120,
+        "compressed": false
+      },
+      {
+        "name": "uefisecapp.img",
+        "size": 200704,
+        "compressed": false
+      },
+      {
+        "name": "vbmeta.img",
+        "size": 8192,
+        "compressed": false
+      },
+      {
+        "name": "vbmeta_system.img",
+        "size": 4096,
+        "compressed": false
+      },
+      {
+        "name": "vendor_boot.img",
+        "size": 100663296,
+        "compressed": false
+      },
+      {
+        "name": "vm-bootsys.img",
+        "size": 20971520,
+        "compressed": false
+      },
+      {
+        "name": "xbl.img",
+        "size": 1118208,
+        "compressed": false
+      },
+      {
+        "name": "xbl_config.img",
+        "size": 225280,
+        "compressed": false
+      },
+      {
+        "name": "xbl_ramdump.img",
+        "size": 950272,
+        "compressed": false
+      }
+    ],
+    "root_managers": [
+      "APatch_11282_e8e4651_HEAD-release-signed.apk",
+      "FolkPatch_115404_0f3f42ba_on_main-release.apk",
+      "KernelSU_Next_v3.4.2_33355-release.apk",
+      "KernelSU_v3.3.1_32680-release.apk",
+      "KitsuneMask-30.7.apk",
+      "Magisk-v31.1.apk",
+      "SukiSU_v4.3.0_41100-release.apk"
+    ],
+    "scripts": [
+      "X-MiPort-Flash.bat"
+    ],
+    "required_images": [
+      "boot.img",
+      "init_boot_official.img",
+      "vendor_boot.img",
+      "vbmeta.img",
+      "vbmeta_system.img"
+    ]
+  },
+  "super": {
+    "file_size": 8321499136,
+    "metadata_version": "10.2",
+    "metadata_slots": 3,
+    "metadata_max_size": 65536,
+    "logical_block_size": 4096,
+    "flags": [
+      "virtual_ab_device"
+    ],
+    "groups": [
+      {
+        "name": "default",
+        "max_size": 0,
+        "flags": [
+          "none"
+        ]
+      },
+      {
+        "name": "qti_dynamic_partitions_a",
+        "max_size": 8321499136,
+        "flags": [
+          "none"
+        ]
+      }
+    ],
+    "partition_total": 7902806016,
+    "super_capacity": 8321499136,
+    "free_bytes": 418693120,
+    "partitions": [
+      {
+        "name": "mi_ext_a",
+        "group": "qti_dynamic_partitions_a",
+        "attrs": [],
+        "size": 106156032,
+        "sectors": 207336,
+        "first_sector": 2048,
+        "extents": 1
+      },
+      {
+        "name": "odm_a",
+        "group": "qti_dynamic_partitions_a",
+        "attrs": [],
+        "size": 2306400256,
+        "sectors": 4504688,
+        "first_sector": 210944,
+        "extents": 1
+      },
+      {
+        "name": "product_a",
+        "group": "qti_dynamic_partitions_a",
+        "attrs": [],
+        "size": 3109855232,
+        "sectors": 6073936,
+        "first_sector": 7589888,
+        "extents": 1
+      },
+      {
+        "name": "system_a",
+        "group": "qti_dynamic_partitions_a",
+        "attrs": [],
+        "size": 953421824,
+        "sectors": 1862152,
+        "first_sector": 5695488,
+        "extents": 1
+      },
+      {
+        "name": "system_dlkm_a",
+        "group": "qti_dynamic_partitions_a",
+        "attrs": [],
+        "size": 14934016,
+        "sectors": 29168,
+        "first_sector": 7559168,
+        "extents": 1
+      },
+      {
+        "name": "system_ext_a",
+        "group": "qti_dynamic_partitions_a",
+        "attrs": [],
+        "size": 912179200,
+        "sectors": 1781600,
+        "first_sector": 13664256,
+        "extents": 1
+      },
+      {
+        "name": "vendor_a",
+        "group": "qti_dynamic_partitions_a",
+        "attrs": [],
+        "size": 469032960,
+        "sectors": 916080,
+        "first_sector": 4716544,
+        "extents": 1
+      },
+      {
+        "name": "vendor_dlkm_a",
+        "group": "qti_dynamic_partitions_a",
+        "attrs": [],
+        "size": 30826496,
+        "sectors": 60208,
+        "first_sector": 5634048,
+        "extents": 1
+      }
+    ]
+  },
+  "budget": 8321499136
+}

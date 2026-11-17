@@ -16,6 +16,7 @@
 | 6 精简 / 修补 | `tools/slim.py` + `tools/shennong_patch.py` | 精简后的分区 + 资源替换结果 |
 | 7 打包分区 | `tools/pack_partitions.py` | `workspace/packed/*.img` |
 | 8 合成 + 出包 | `workspace/packed/super.img` + `tools/package_zip.py` | `workspace/output/*.zip` |
+| 8.5 基线比对 | `tools/ref_check.py` | 与 `reference/rom6_reference.json` 的 ok/warn/fail 清单 |
 
 ## 2. 精简 / 修补明细
 
@@ -48,6 +49,7 @@
 | 压缩 | `package_zip._zstd_compress` | 优先 `zstd.exe -12`，退路是 Python 3.14 的 `compression.zstd` |
 | 卡刷包 | `package_zip.build` | `images/super.img.zst` + 固件 + `bin/` + 现生成脚本 + `NOTICE/` |
 | 命名 | `_rom_name` | `ShennongPort_Mi14Pro_<版本>_<donor>_<md5[:10]>_<安卓>.zip` |
+| 基线比对 | `verify_build` → `tools/ref_check.py` | super 容量/metadata/flags/组/8 个 `_a` 分区逐项比对基线，`fail` 可判构建失败 |
 
 ## 4. 刻意的行为偏差
 
@@ -62,3 +64,6 @@
    也不留一个装不进 super 的包。
 5. **每一步都记状态**：`workspace/slim_state.json` 里有每步的 `ok / skip / fail`
    与原因，`--stage` 续跑时直接读它。
+6. **「对齐参考包」不靠注释**：布局参数（8 321 499 136 / 3 slots / virtual_ab /
+   单 group / 只有 `_a`）写成 `reference/rom6_reference.json`，由 `ref_check.py`
+   在打包后复核；换底包或换源包时会先报差异，而不是刷完才发现装不下。

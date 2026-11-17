@@ -1,0 +1,72 @@
+version: 1.0
+name: shennong-port-ci
+displayName: ShennongPort CI（轻量校验）
+
+# 触发：推送到 main/master，或在 Gitee 网页「流水线」页手动「运行」
+triggers:
+  trigger: auto
+  push:
+    branches:
+      include:
+        - main
+        - master
+
+stages:
+  - stage:
+      name: verify
+      displayName: 代码与功能轻量校验
+      trigger: auto
+      strategy:
+        none:   # 每次都跑，不跳过
+      steps:
+        - step: build@python
+          name: python-verify
+          displayName: Python 环境检查
+          pythonVersion: "3.12"
+          commands:
+            # 1) 全仓库语法编译（不生成 pyc 入库）
+            - python -m compileall -q shennong_port.py tools tests
+            # 2) 离线自检：工具链、模块、配置、资源镜像链，不下载 ROM
+            - python shennong_port.py --selftest
+            # 3) 资源镜像链可用性（不下载文件，只打印顺序）
+            - python tools/assets.py mirrors
+
+  - stage:
+      name: test
+      displayName: 离线单元测试
+      trigger: auto
+      strategy:
+        none:
+      steps:
+        - step: build@python
+          name: unit-test
+          displayName: 合成数据单元回归
+          pythonVersion: "3.12"
+          commands:
+            # 无 ROM、无网络；用合成文件系统验证精简 / 修补 / 打包逻辑
+            - python tests/test_stages.py
+            - python tests/test_payload_args.py
+            # liblp 解析 / 参考基线比对（合成 super；真实包不存在时自动 skip）
+            - python tests/test_ref_check.py
+
+  - stage:
+      name: package
+      displayName: 源码包产物
+      trigger: auto
+      strategy:
+        none:
+      steps:
+        - step: build@python
+          name: src-package
+          displayName: 打 Windows 源码包
+          pythonVersion: "3.12"
+          commands:
+            - rm -rf release && mkdir -p release
+            - cp shennong_port.py config.ini LICENSE README.md NOTICE.md CHANGELOG.md release/
+            - cp -r tools docs ci licenses reference release/
+            - cd release && zip -qr ../shennong-port-src.zip . && cd ..
+            - ls -lh shennong-port-src.zip
+          artifacts:
+            - name: source-package
+              path:
+                - shennong-port-src.zip
