@@ -1,4 +1,4 @@
-# ---- 构建 / 测试产物 ----
+﻿# ---- 构建 / 测试产物 ----
 workspace/
 assets/shennong_files/
 __pycache__/
@@ -28,3 +28,6 @@ release/
 .idea/
 Thumbs.db
 desktop.ini
+
+# ROOT 管理器 apk（第三方产物，~110 MiB，本地放置不入库）
+assets/root_images/RootManager/

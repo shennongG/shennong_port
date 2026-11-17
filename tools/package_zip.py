@@ -592,6 +592,34 @@ def _write_readme(stage, info):
     return dest
 
 
+def _stage_root_managers(stage, cfg=None):
+    """把 ROOT 管理器 apk 放进 zip 的 RootManager/（参考包的做法）。
+
+    ROOT 变体只刷 init_boot，管理器 apk 得自己装；参考成品包把 7 个管理器
+    （Magisk / KernelSU / SukiSU / KernelSU-Next / Kitsune Mask / APatch /
+    FolkPatch）直接塞进 RootManager/，接收方解压就能装。这里同样处理，但
+    apk 体积大且是第三方产物，所以**不入库**：默认从 `root_manager_dir`
+    读（缺省 assets/root_images/RootManager），目录不存在就跳过。
+    """
+    rel = str((cfg or {}).get("flat", {}).get("root_manager_dir",
+                                               "assets/root_images/RootManager")).strip()
+    out = []
+    if not rel:
+        return out
+    src = sc.ROOT / rel
+    if not src.is_dir():
+        return out
+    dest = stage / "RootManager"
+    dest.mkdir(parents=True, exist_ok=True)
+    for apk in sorted(src.glob("*.apk")):
+        try:
+            shutil.copy2(str(apk), str(dest / apk.name))
+            out.append(apk.name)
+        except OSError:
+            continue
+    return out
+
+
 def build(cfg, compress=None, dry_run=False, quiet=False):
     super_img = sc.PACK_OUT / "super.img"
     if not super_img.is_file():
@@ -614,9 +642,15 @@ def build(cfg, compress=None, dry_run=False, quiet=False):
     stage.mkdir(parents=True, exist_ok=True)
     _stage_tools(stage)
     fw_count = _stage_firmware(stage, cfg)
+    root_apks = _stage_root_managers(stage, cfg)
     _check_vbmeta(stage / "images")
     if not quiet:
         print("  [pack] images/: {} 个固件镜像".format(fw_count))
+        if root_apks:
+            print("  [pack] RootManager/: {} 个管理器 apk".format(len(root_apks)))
+        else:
+            print("  [pack] RootManager/: 未配置（root_manager_dir 为空或不存在），"
+                  "选了 ROOT 请自行装管理器")
 
     keep_raw = str(cfg.get("flat", {}).get("keep_super_img", "false")).strip().lower() == "true"
     cleanup = str(cfg.get("flat", {}).get("cleanup_intermediate", "true")).strip().lower() == "true"

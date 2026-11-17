@@ -420,6 +420,9 @@ def read_packing_config():
         "reference": "reference/rom6_reference.json",
         "expect_donor": "nezha",      # 移植源代号，出包时核对
         "verify_tolerance_mib": "64",
+        # ROOT 管理器 apk（Magisk/KernelSU/...）入包位置；目录不存在就跳过。
+        # 体积大且是第三方产物，默认不入库，见 docs/PORT_NEZHA_TO_14PRO.md
+        "root_manager_dir": "assets/root_images/RootManager",
     }
     if CONFIG.exists():
         for raw in CONFIG.read_text(encoding="gbk", errors="ignore").splitlines():
@@ -1670,6 +1673,17 @@ def stage_pack(pack_cfg, auto=False, offline=False):
     # vbmeta 禁验（在 super 打包之后、汇总之前，不受 pack_super 限制）
     patch_vbmeta(pack_cfg)
 
+    # ---------------- Step 7.9: 参考基线比对 ----------------
+    # 必须在出 zip 之前跑：package_zip 会 zstd 压缩并删掉 raw super.img
+    # （keep_super_img=false 时），否则只能对着空气比对。
+    verify_mode = str(pack_cfg.get("verify_after_pack", "true")).strip().lower()
+    verify_rc, verify_counts = 2, {}
+    if verify_mode not in ("false", "0", "no", "off", ""):
+        verify_rc, verify_counts = verify_build(
+            pack_cfg, strict=(verify_mode == "strict"))
+        if verify_mode == "strict" and verify_rc == 1:
+            port_failed = True
+
     # ---- 卡刷包 zip（参考包的输出形态）----
     # 只有 lpmake 成功且没有分区打包失败时才做 zip；否则只会拿半个 super 去压缩。
     zip_name = ""
@@ -1689,15 +1703,6 @@ def stage_pack(pack_cfg, auto=False, offline=False):
             port_failed = True
             err("zip packaging failed: {}".format(zsum.get("error", "")))
             log_write("ERROR: zip packaging failed: {}".format(zsum.get("error", "")))
-
-    # ---------------- Step 7.9: 参考基线比对 ----------------
-    verify_mode = str(pack_cfg.get("verify_after_pack", "true")).strip().lower()
-    verify_rc, verify_counts = 2, {}
-    if verify_mode not in ("false", "0", "no", "off", ""):
-        verify_rc, verify_counts = verify_build(
-            pack_cfg, strict=(verify_mode == "strict"))
-        if verify_mode == "strict" and verify_rc == 1:
-            port_failed = True
 
     # ---------------- Step 8: 汇总 ----------------
     port_ok = ((not port_failed) and counters["pack_fail"] == 0
